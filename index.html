@@ -16,8 +16,8 @@
 
 
 <header class="bg-white border-b border-gray-100 sticky top-0 z-50">
-    <div class="flex justify-center py-4 mb-3" style="background-color: #f6f7f1;">
-        <img src="logo.jpg" alt="Grabb A Green" class="h-10 w-auto object-contain">
+    <div class="flex justify-center py-2 mb-3" style="background-color: #f6f7f1;">
+        <img src="logo.jpg" alt="Grabb A Green" class="h-14 w-auto object-contain">
     </div>
 
     <div class="flex items-center justify-center relative px-4 pb-3">
@@ -114,6 +114,23 @@
             </div>
         </div>
     </div>
+    <div id="actionMenu" class="fixed inset-0 z-[250] hidden flex items-end justify-center p-4">
+    <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" onclick="closeActionMenu()"></div>
+    <div class="relative bg-white w-full max-w-sm rounded-t-3xl p-6 shadow-2xl animate-slide-up">
+        <h2 id="actionMenuTitle" class="text-sm font-black text-gray-400 uppercase tracking-widest mb-4 text-center">Customer Options</h2>
+        <div class="space-y-3">
+            <button onclick="handleMenuEdit()" class="w-full flex items-center justify-between p-4 bg-gray-50 rounded-2xl font-bold text-gray-800 active:bg-gray-100">
+                <span>✏️ Edit Profile</span>
+                <span class="text-gray-400">→</span>
+            </button>
+            <button id="resetActionBtn" onclick="handleMenuReset()" class="w-full flex items-center justify-between p-4 bg-red-50 rounded-2xl font-bold text-red-600 active:bg-red-100">
+                <span>🔄 Reset Attendance</span>
+                <span class="text-red-400">→</span>
+            </button>
+            <button onclick="closeActionMenu()" class="w-full p-4 text-gray-400 font-bold">Cancel</button>
+        </div>
+    </div>
+</div>
     <div id="editModal" class="fixed inset-0 z-[200] hidden flex items-center justify-center p-4">
         <div class="absolute inset-0 bg-black/70 backdrop-blur-md" onclick="closeEditModal()"></div>
         <div class="relative bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl overflow-y-auto max-h-[90vh]">

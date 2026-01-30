@@ -678,34 +678,75 @@ document.addEventListener('contextmenu', function(e) {
 
 let pressTimer;
 
+// NEW: Global tracker for which customer the menu is looking at
+let menuActiveCustId = null;
+
 function setupLongPress(element, custId) {
     const start = (e) => {
-        // Only trigger for primary touch or left click
         if (e.type === 'click' && e.button !== 0) return;
-        
-        // Clear any existing timer just in case
         clearTimeout(pressTimer);
-        
         pressTimer = setTimeout(() => {
-            // Give haptic feedback (vibration)
             if (navigator.vibrate) navigator.vibrate(50);
-            openEditModal(custId);
-        }, 600); // Slightly faster for better feel
+            openActionMenu(custId); // NEW: Open choice menu instead of direct edit
+        }, 600); 
     };
 
-    const cancel = () => {
-        clearTimeout(pressTimer);
-    };
+    const cancel = () => clearTimeout(pressTimer);
 
-    // Mobile events
     element.addEventListener('touchstart', start, { passive: true });
     element.addEventListener('touchend', cancel);
     element.addEventListener('touchmove', cancel);
-
-    // Desktop/Emulator mouse events
     element.addEventListener('mousedown', start);
     element.addEventListener('mouseup', cancel);
     element.addEventListener('mouseleave', cancel);
+}
+
+async function openActionMenu(custId) {
+    menuActiveCustId = custId;
+    const cust = await db.customers.get(custId);
+    const viewDate = selectedDate || getToday();
+    
+    // Check if there is an attendance record to reset
+    const record = await db.attendance.where({ custId: custId, date: viewDate }).first();
+    
+    document.getElementById('actionMenuTitle').innerText = cust.nickname || cust.name;
+    
+    // Only show the Reset button if a record exists for today
+    const resetBtn = document.getElementById('resetActionBtn');
+    resetBtn.style.display = record ? 'flex' : 'none';
+
+    document.getElementById('actionMenu').classList.remove('hidden');
+}
+
+function closeActionMenu() {
+    document.getElementById('actionMenu').classList.add('hidden');
+    menuActiveCustId = null;
+}
+
+// Choice 1: Open the Edit Modal
+function handleMenuEdit() {
+    const id = menuActiveCustId;
+    closeActionMenu();
+    openEditModal(id); // Your existing function
+}
+
+// Choice 2: Reset the Attendance (The Mistake Fixer)
+async function handleMenuReset() {
+    const id = menuActiveCustId;
+    const viewDate = selectedDate || getToday();
+
+    // Past date safeguard
+    if (viewDate !== trueToday) {
+        if (!confirm("You are modifying a past date. Reset this record?")) return;
+    }
+
+    const record = await db.attendance.where({ custId: id, date: viewDate }).first();
+    if (record) {
+        await db.attendance.delete(record.id);
+        showUndo("Attendance cleared");
+        renderApp();
+    }
+    closeActionMenu();
 }
 
 async function openEditModal(custId) {

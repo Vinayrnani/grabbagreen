@@ -750,27 +750,6 @@ window.closeEditModal = function() {
 // Update Walk-In counts (Stored under customerId: 0, totally separate from customers)
 // Fix for v1.5 Walk-in Logic
 async function updateWalkIn(type, change) {
-    // Use the global selectedDate variable from your v1.4 code
-    const date = selectedDate || new Date().toISOString().split('T')[0];
-    
-    // Ensure we only ever touch the "Walk-In" record (ID 0)
-    let record = await db.attendance.where({ custId: 0, date: date }).first();
-    
-    if (!record) {
-        record = { custId: 0, date: date, salad: 0, addon: 0, isWalkIn: true };
-    }
-
-    if (type === 'salad') {
-        record.salad = Math.max(0, (record.salad || 0) + change);
-    } else {
-        record.addon = Math.max(0, (record.addon || 0) + change);
-    }
-
-    await db.attendance.put(record);
-    renderApp(); // Refresh both counters and the list
-}
-
-async function updateWalkIn(type, change) {
     const date = selectedDate || new Date().toISOString().split('T')[0];
     
     // Use 'custId' (standardized) to find the record
@@ -801,6 +780,21 @@ async function renderApp() {
     // 2. Fix the disappearing list:
     // Call your original v1.4 render function to draw the cards
     await renderList(); 
+}
+
+// Ensure the date picker also calls the new renderApp
+async function changeAppDate(val) {
+    selectedDate = val;
+    const display = document.getElementById('displayDate');
+    
+    if (val === trueToday) {
+        display.innerText = "Today";
+    } else {
+        const d = new Date(val);
+        display.innerText = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }).toUpperCase();
+    }
+    
+    await renderApp();
 }
 /*async function changeAppDate(val) {
     selectedDate = val;

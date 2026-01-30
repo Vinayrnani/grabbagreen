@@ -9,6 +9,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
 </head>
 
 <body class="bg-gray-100 font-sans select-none">
@@ -64,44 +65,56 @@
     </div>
 
 
-<main class="p-3 space-y-6 pb-32">
-    <section class="bg-white rounded-3xl p-3 shadow-sm border border-gray-100">
-    <div class="flex items-center justify-between mb-2 border-b border-gray-50 pb-1">
-        <h2 class="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400">Daily Walk-In Sales</h2>
-    </div>
-    
-    <div class="grid grid-cols-2 gap-3"> <div class="bg-[#f6f7f1] rounded-2xl p-2 flex flex-col items-center">
-            <span class="text-[9px] font-bold text-gray-500 mb-1 uppercase">Salads</span>
-            <div class="flex items-center gap-3">
-                <button onclick="updateWalkIn('salad', -1)" class="w-7 h-7 rounded-full bg-white shadow-sm flex items-center justify-center font-bold text-gray-400 active:scale-90">-</button>
-                <span id="walkInSaladCount" class="text-lg font-black text-gray-800">0</span>
-                <button onclick="updateWalkIn('salad', 1)" class="w-7 h-7 rounded-full bg-white shadow-sm flex items-center justify-center font-bold text-gray-400 active:scale-90">+</button>
+<main class="p-3 pb-32">
+    <div id="dailyScreen">
+        <section class="bg-white rounded-3xl p-3 shadow-sm border border-gray-100 mb-6">
+            <div class="flex items-center justify-between mb-2 border-b border-gray-50 pb-1">
+                <h2 class="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400">Daily Walk-In Sales</h2>
             </div>
-        </div>
-
-        <div class="bg-[#f6f7f1] rounded-2xl p-2 flex flex-col items-center">
-            <span class="text-[9px] font-bold text-gray-500 mb-1 uppercase">Add-Ons</span>
-            <div class="flex items-center gap-3">
-                <button onclick="updateWalkIn('addon', -1)" class="w-7 h-7 rounded-full bg-white shadow-sm flex items-center justify-center font-bold text-gray-400 active:scale-90">-</button>
-                <span id="walkInAddonCount" class="text-lg font-black text-gray-800">0</span>
-                <button onclick="updateWalkIn('addon', 1)" class="w-7 h-7 rounded-full bg-white shadow-sm flex items-center justify-center font-bold text-gray-400 active:scale-90">+</button>
+            <div class="grid grid-cols-2 gap-3">
+                <div class="bg-[#f6f7f1] rounded-2xl p-2 flex flex-col items-center">
+                    <span class="text-[9px] font-bold text-gray-500 mb-1 uppercase">Salads</span>
+                    <div class="flex items-center gap-3">
+                        <button onclick="updateWalkIn('salad', -1)" class="w-7 h-7 rounded-full bg-white shadow-sm flex items-center justify-center font-bold text-gray-400">-</button>
+                        <span id="walkInSaladCount" class="text-lg font-black text-gray-800">0</span>
+                        <button onclick="updateWalkIn('salad', 1)" class="w-7 h-7 rounded-full bg-white shadow-sm flex items-center justify-center font-bold text-gray-400">+</button>
+                    </div>
+                </div>
+                <div class="bg-[#f6f7f1] rounded-2xl p-2 flex flex-col items-center">
+                    <span class="text-[9px] font-bold text-gray-500 mb-1 uppercase">Add-Ons</span>
+                    <div class="flex items-center gap-3">
+                        <button onclick="updateWalkIn('addon', -1)" class="w-7 h-7 rounded-full bg-white shadow-sm flex items-center justify-center font-bold text-gray-400">-</button>
+                        <span id="walkInAddonCount" class="text-lg font-black text-gray-800">0</span>
+                        <button onclick="updateWalkIn('addon', 1)" class="w-7 h-7 rounded-full bg-white shadow-sm flex items-center justify-center font-bold text-gray-400">+</button>
+                    </div>
+                </div>
             </div>
+        </section>
+
+        <div>
+            <h2 class="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 px-2 mb-3">Subscribed Customers</h2>
+            <div id="attendanceList" class="space-y-3"></div>
         </div>
     </div>
-</section>
 
-    <div>
-        <h2 class="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 px-2 mb-3">Subscribed Customers</h2>
-        <div id="attendanceList" class="space-y-3">
+    <div id="invoiceScreen" class="hidden">
+        <div class="bg-white rounded-3xl p-4 shadow-sm border border-gray-100 mb-4">
+            <h2 class="text-sm font-black italic mb-3 uppercase tracking-tighter">Billing Period</h2>
+            <input type="month" id="invoiceMonthPicker" 
+                   onchange="renderInvoices()" 
+                   class="w-full p-4 bg-gray-50 rounded-2xl border-none font-bold text-gray-700">
+        </div>
+        <div id="invoiceListContainer" class="space-y-3">
             </div>
     </div>
 </main>
 
+    
     <div id="undoBar"
-        class="fixed bottom-20 left-4 right-4 bg-gray-800 text-white p-3 rounded-lg shadow-2xl flex justify-between items-center hidden transition-all">
-        <span id="undoText">Action saved</span>
-        <button onclick="undoLastAction()" class="text-yellow-400 font-bold uppercase text-sm">Undo</button>
-    </div>
+    class="fixed left-4 right-4 bg-gray-800 text-white p-3 rounded-lg shadow-2xl flex justify-between items-center hidden transition-all">
+    <span id="undoText">Action saved</span>
+    <button onclick="undoLastAction()" class="text-yellow-400 font-bold uppercase text-sm">Undo</button>
+</div>
     <div id="modalOverlay"
         class="fixed inset-0 bg-black bg-opacity-50 z-[100] hidden flex items-center justify-center p-4">
         <div class="bg-white w-full max-w-md rounded-2xl p-6 shadow-2xl">
@@ -202,13 +215,14 @@
     class="fixed bottom-24 right-6 w-14 h-14 bg-green-600 text-white rounded-full shadow-2xl flex items-center justify-center text-2xl font-bold z-40 active:scale-90 transition-transform">
     +
 </button>
+
     <footer class="fixed bottom-0 w-full bg-white border-t flex justify-around p-3 text-gray-600">
         <button onclick="showTab('attendance')" class="flex flex-col items-center text-green-600">
             <span>📅</span><span class="text-xs">Daily</span>
         </button>
-        <button onclick="generateAllInvoices()" class="flex flex-col items-center">
-            <span>📄</span><span class="text-xs">Invoices</span>
-        </button>
+        <button onclick="showTab('invoices')" class="flex flex-col items-center">
+    <span>📄</span><span class="text-xs">Invoices</span>
+</button>
         <button onclick="showWalkIn()" class="flex flex-col items-center">
             <span>🏪</span><span class="text-xs">Walk-In</span>
         </button>

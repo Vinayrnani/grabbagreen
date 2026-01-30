@@ -284,6 +284,21 @@ input[type="date"]#dateJump::-webkit-calendar-picker-indicator {
     to { transform: translateY(0); }
 }
 
+
 .animate-slide-up {
     animation: slide-up 0.3s ease-out;
+}
+
+/* VERSION 1.6 - POSITIONING FIX */
+#undoBar.visible {
+    display: flex !important;
+    bottom: 1rem !important; /* Moves it down away from the + button */
+    z-index: 100;
+    animation: slideUp 0.3s ease-out;
+}
+
+/* Adjust the Floating Button to ensure it stays above everything */
+button[onclick="showAddCustomer()"] {
+    bottom: 5rem; /* Keeps the + button higher up for easy thumb reach */
+    z-index: 50;
 }

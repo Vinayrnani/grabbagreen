@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Salad Master Attendance</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+
+<body class="bg-gray-100 font-sans select-none">
+
+
+
+<header class="bg-white border-b border-gray-100 sticky top-0 z-50">
+    <div class="flex justify-center py-4 mb-3" style="background-color: #f6f7f1;">
+        <img src="logo.jpg" alt="Grabb A Green" class="h-10 w-auto object-contain">
+    </div>
+
+    <div class="flex items-center justify-center relative px-4 pb-3">
+        <div class="relative inline-block">
+            <div class="flex items-center gap-2 px-6 py-2 bg-gray-50 rounded-full border border-gray-200">
+                <span id="displayDate" class="text-xs font-black uppercase tracking-widest text-gray-700">Today</span>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
+            </div>
+            <input type="date" id="dateJump" onchange="changeAppDate(this.value)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+        </div>
+
+        <button onclick="toggleSettings()" class="absolute right-4 p-2 text-gray-400 hover:text-green-600">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+        </button>
+    </div>
+</header>
+
+    <div id="settingsDrawer" class="fixed inset-0 z-[150] hidden">
+        <div class="absolute inset-0 bg-black bg-opacity-60 backdrop-blur-sm" onclick="toggleSettings()"></div>
+        <div
+            class="absolute right-0 top-0 bottom-0 w-64 bg-white shadow-2xl p-6 flex flex-col gap-4 transition-transform transform">
+            <h2 class="text-xl font-black mb-4 text-gray-800">Settings</h2>
+            <button onclick="exportData()"
+                class="flex items-center gap-3 w-full p-3 bg-gray-50 rounded-xl hover:bg-gray-100 font-bold text-gray-700">
+                <span>📤 Backup Data</span>
+            </button>
+            <button onclick="importData()"
+                class="flex items-center gap-3 w-full p-3 bg-gray-50 rounded-xl hover:bg-gray-100 font-bold text-gray-700">
+                <span>📥 Restore Data</span>
+            </button>
+            <button onclick="generateAllInvoices()"
+                class="flex items-center gap-3 w-full p-3 bg-green-50 rounded-xl hover:bg-green-100 font-bold text-green-700">
+                <span>📄 Monthly Invoices</span>
+            </button>
+            <div class="mt-auto text-[10px] text-gray-400 text-center uppercase tracking-widest">
+                Grabb a Green v2.0
+            </div>
+        </div>
+    </div>
+
+
+<main class="p-3 space-y-6 pb-32">
+    <section class="bg-white rounded-3xl p-3 shadow-sm border border-gray-100">
+    <div class="flex items-center justify-between mb-2 border-b border-gray-50 pb-1">
+        <h2 class="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400">Daily Walk-In Sales</h2>
+    </div>
+    
+    <div class="grid grid-cols-2 gap-3"> <div class="bg-[#f6f7f1] rounded-2xl p-2 flex flex-col items-center">
+            <span class="text-[9px] font-bold text-gray-500 mb-1 uppercase">Salads</span>
+            <div class="flex items-center gap-3">
+                <button onclick="updateWalkIn('salad', -1)" class="w-7 h-7 rounded-full bg-white shadow-sm flex items-center justify-center font-bold text-gray-400 active:scale-90">-</button>
+                <span id="walkInSaladCount" class="text-lg font-black text-gray-800">0</span>
+                <button onclick="updateWalkIn('salad', 1)" class="w-7 h-7 rounded-full bg-white shadow-sm flex items-center justify-center font-bold text-gray-400 active:scale-90">+</button>
+            </div>
+        </div>
+
+        <div class="bg-[#f6f7f1] rounded-2xl p-2 flex flex-col items-center">
+            <span class="text-[9px] font-bold text-gray-500 mb-1 uppercase">Add-Ons</span>
+            <div class="flex items-center gap-3">
+                <button onclick="updateWalkIn('addon', -1)" class="w-7 h-7 rounded-full bg-white shadow-sm flex items-center justify-center font-bold text-gray-400 active:scale-90">-</button>
+                <span id="walkInAddonCount" class="text-lg font-black text-gray-800">0</span>
+                <button onclick="updateWalkIn('addon', 1)" class="w-7 h-7 rounded-full bg-white shadow-sm flex items-center justify-center font-bold text-gray-400 active:scale-90">+</button>
+            </div>
+        </div>
+    </div>
+</section>
+
+    <div>
+        <h2 class="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 px-2 mb-3">Subscribed Customers</h2>
+        <div id="attendanceList" class="space-y-3">
+            </div>
+    </div>
+</main>
+
+    <div id="undoBar"
+        class="fixed bottom-20 left-4 right-4 bg-gray-800 text-white p-3 rounded-lg shadow-2xl flex justify-between items-center hidden transition-all">
+        <span id="undoText">Action saved</span>
+        <button onclick="undoLastAction()" class="text-yellow-400 font-bold uppercase text-sm">Undo</button>
+    </div>
+    <div id="modalOverlay"
+        class="fixed inset-0 bg-black bg-opacity-50 z-[100] hidden flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-md rounded-2xl p-6 shadow-2xl">
+            <div id="modalContent"></div>
+            <div class="mt-6 flex gap-3">
+                <button onclick="closeModal()"
+                    class="flex-1 py-3 bg-gray-200 text-gray-700 font-bold rounded-xl">Cancel</button>
+                <button id="modalConfirmBtn"
+                    class="flex-1 py-3 bg-green-600 text-white font-bold rounded-xl shadow-lg">Save</button>
+            </div>
+        </div>
+    </div>
+    <div id="editModal" class="fixed inset-0 z-[200] hidden flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/70 backdrop-blur-md" onclick="closeEditModal()"></div>
+        <div class="relative bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl overflow-y-auto max-h-[90vh]">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-xl font-black text-gray-800 uppercase tracking-tight">Edit Profile</h2>
+                <button onclick="closeEditModal()" class="text-gray-400 hover:text-gray-600">✕</button>
+            </div>
+
+            <div class="space-y-5">
+                <div>
+                    <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Full Name
+                        (Internal)</label>
+                    <input type="text" id="editFullName"
+                        class="w-full border-b-2 border-gray-100 p-2 focus:border-green-500 outline-none font-medium text-gray-600">
+                </div>
+
+                <div>
+                    <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Nickname (Show on
+                        Card)</label>
+                    <input type="text" id="editNickname"
+                        class="w-full border-b-2 border-gray-100 p-2 focus:border-green-500 outline-none font-bold text-lg text-gray-900">
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="text-[10px] font-bold text-gray-400 uppercase">Delivery Route</label>
+                        <select id="editRoute" class="w-full border-b-2 border-gray-100 p-2 outline-none font-bold">
+                            <option value="A">ROUTE A</option>
+                            <option value="B">ROUTE B</option>
+                            <option value="C">ROUTE C</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-bold text-gray-400 uppercase">Plan Type</label>
+                        <select id="editPlan" class="w-full border-b-2 border-gray-100 p-2 outline-none font-bold">
+                            <option value="Regular">Regular</option>
+                            <option value="Premium">Premium</option>
+                            <option value="MealBox">MealBox</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="text-[10px] font-bold text-gray-400 uppercase">Discount %</label>
+                        <input type="number" id="editDiscount"
+                            class="w-full border-b-2 border-gray-100 p-2 outline-none font-bold" placeholder="0">
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-bold text-gray-400 uppercase">Account Status</label>
+                        <select id="editStatus" class="w-full border-b-2 border-gray-100 p-2 outline-none font-bold">
+                            <option value="active" class="text-green-600">ACTIVE</option>
+                            <option value="inactive" class="text-red-600">INACTIVE</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-8 flex flex-col gap-3">
+                <button onclick="saveCustomerEdit()"
+                    class="w-full bg-gray-900 text-white py-4 rounded-2xl font-bold shadow-xl active:scale-95 transition-transform">Update
+                    Profile</button>
+                <p class="text-center text-[9px] text-gray-400 uppercase tracking-widest">Changes affect reports and
+                    billing</p>
+            </div>
+        </div>
+    </div>
+<button onclick="showAddCustomer()" 
+    class="fixed bottom-24 right-6 w-14 h-14 bg-green-600 text-white rounded-full shadow-2xl flex items-center justify-center text-2xl font-bold z-40 active:scale-90 transition-transform">
+    +
+</button>
+    <footer class="fixed bottom-0 w-full bg-white border-t flex justify-around p-3 text-gray-600">
+        <button onclick="showTab('attendance')" class="flex flex-col items-center text-green-600">
+            <span>📅</span><span class="text-xs">Daily</span>
+        </button>
+        <button onclick="generateAllInvoices()" class="flex flex-col items-center">
+            <span>📄</span><span class="text-xs">Invoices</span>
+        </button>
+        <button onclick="showWalkIn()" class="flex flex-col items-center">
+            <span>🏪</span><span class="text-xs">Walk-In</span>
+        </button>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+
+</html>

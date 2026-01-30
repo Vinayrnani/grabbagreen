@@ -1,0 +1,280 @@
+.route-btn {
+    @apply px-4 py-2 rounded-full bg-gray-200 text-gray-700 font-medium;
+}
+.route-btn.active {
+    @apply bg-green-600 text-white;
+}
+
+/* Swipe Styling */
+.customer-card {
+    transition: transform 0.2s ease-out, opacity 0.2s;
+    touch-action: pan-y; /* Allows vertical scrolling while swiping horizontal */
+}
+
+.swipe-delivered {
+    background-color: #22c55e !important; /* green-500 */
+}
+
+.swipe-skip {
+    background-color: #f59e0b !important; /* amber-500 */
+}
+
+/* Simple Animation for the Undo Bar */
+#undoBar.visible {
+    display: flex;
+    animation: slideUp 0.3s forwards;
+}
+
+@keyframes slideUp {
+    from { transform: translateY(100px); }
+    to { transform: translateY(0); }
+}
+
+
+
+
+.status-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 900;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+
+
+/* Force these colors to show regardless of other classes */
+.bg-green-100 { background-color: #dcfce7 !important; border-color: #15803d !important; }
+.bg-orange-100 { background-color: #ffedd5 !important; border-color: #c2410c !important; }
+.bg-blue-100 { background-color: #dbeafe !important; border-color: #1d4ed8 !important; }
+
+/* Add a transition for a smooth color change */
+.customer-card {
+    transition: all 0.4s ease-in-out;
+}
+
+/* Adding a little "pop" to the Addon button */
+button[onclick*="addAddon"] {
+    transition: transform 0.1s active;
+}
+button[onclick*="addAddon"]:active {
+    transform: scale(0.9);
+}
+
+/* Modal animation */
+#modalOverlay {
+    backdrop-filter: blur(4px);
+    transition: opacity 0.3s ease;
+}
+#undoBar.visible {
+    display: flex !important;
+    animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+    from { transform: translateY(100px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+/* Yellow pulsing badge for "Requested" */
+.badge-requested {
+    @apply bg-yellow-400 text-black border border-yellow-600 animate-pulse;
+}
+
+/* Solid Blue badge for "Included" (after delivery) */
+.badge-included {
+    @apply bg-blue-600 text-white border border-blue-800 shadow-sm;
+}
+
+.status-badge-container {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 8px;
+}
+
+.bg-blue-50 {
+    background-color: #eff6ff !important;
+    border-left-color: #2563eb !important; /* Deep blue for vacation */
+}
+
+/* Make the vacation message look like a formal notification */
+.vacation-msg {
+    color: #1e40af;
+    font-size: 0.75rem;
+    font-weight: 700;
+    margin-top: 4px;
+    display: block;
+}
+/* Vacation Card - Muted & Grayed Out */
+.bg-vacation-muted {
+    background-color: #f8fafc !important; /* Very light slate gray */
+    border-left-color: #3b82f6 !important; /* Keep the blue strip for identification */
+    filter: grayscale(0.5); /* Subtle desaturation */
+    opacity: 0.85;
+}
+
+/* Make the resume button pop against the gray */
+.btn-resume {
+    background-color: #2563eb;
+    color: white;
+    transition: transform 0.2s;
+}
+
+.btn-resume:active {
+    transform: scale(0.95);
+}
+
+.border-orange-500 {
+    border-color: #f97316 !important;
+    box-shadow: 0 0 10px rgba(249, 115, 22, 0.3);
+}
+
+#displayDate {
+    min-width: 60px;
+    text-align: center;
+}
+/* Matching the Nav Skin */
+#displayDate {
+    min-width: 80px;
+    text-align: center;
+}
+
+/* When the date is NOT today, we change the skin to a 'Warning' theme */
+.date-warning {
+    border-color: #f59e0b !important; /* Amber border */
+    color: #f59e0b !important;      /* Amber text */
+    background-color: rgba(245, 158, 11, 0.05) !important;
+}
+
+/* Subtle glow for the pill */
+label[for="dateJump"] {
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+}
+
+/* Slim Date Bar Styling */
+#datePill {
+    border-bottom: 2px solid transparent;
+}
+
+/* Warning state for past/future dates */
+.date-active-warning {
+    color: #f59e0b !important; /* Amber */
+    border-bottom-color: #f59e0b !important;
+}
+
+/* Remove default browser styling for date input on mobile */
+#dateJump::-webkit-calendar-picker-indicator {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    cursor: pointer;
+}
+
+/* Ensure the input never shows its own background */
+#dateJump {
+    background: transparent !important;
+    color: transparent !important;
+    -webkit-appearance: none;
+}
+
+/* Chrome/Safari specific reset to remove that 'inner' black/white box */
+#dateJump::-webkit-calendar-picker-indicator {
+    background: transparent;
+    bottom: 0;
+    color: transparent;
+    cursor: pointer;
+    height: auto;
+    left: 0;
+    position: absolute;
+    right: 0;
+    top: 0;
+    width: auto;
+}
+
+/* Style for when you travel to another date */
+.is-time-travelling {
+    background-color: rgba(245, 158, 11, 0.1); /* Very subtle amber glow */
+}
+
+.is-time-travelling #displayDate {
+    color: #f59e0b !important; /* Amber text */
+}
+
+/* Force the date input to be completely invisible */
+input[type="date"]#dateJump {
+    background-color: transparent !important;
+    color: transparent !important;
+    border: none !important;
+    outline: none !important;
+    -webkit-appearance: none !important;
+}
+
+/* This is the specific fix for the 'Black Box' on Android/Chrome */
+input[type="date"]#dateJump::-webkit-inner-spin-button,
+input[type="date"]#dateJump::-webkit-calendar-picker-indicator {
+    background: transparent !important;
+    -webkit-appearance: none !important;
+    opacity: 0 !important;
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    left: 0;
+    top: 0;
+}
+#settingsDrawer {
+    transition: all 0.3s ease-in-out;
+}
+
+#settingsDrawer:not(.hidden) .absolute.right-0 {
+    animation: slideInRight 0.3s ease-out;
+}
+
+@keyframes slideInRight {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+}
+
+/* Ensure the date selector pill is clean */
+#dateDisplayContainer {
+    background-color: #111827 !important; /* Forces Gray-900 to match header */
+    border-color: #1f2937 !important;     /* Gray-800 */
+}
+
+/* This kills the 'tap highlight' and 'selection' blocks in Chrome Emulation */
+.customer-card {
+    /* Critical for Chrome/Safari Mobile */
+    -webkit-touch-callout: none !important; 
+    -webkit-user-select: none !important;
+    user-select: none !important;
+    
+    /* Removes the gray tap highlight in Chrome */
+    -webkit-tap-highlight-color: transparent;
+    
+    /* Visual cue that it's interactive */
+    cursor: pointer;
+}
+
+/* Ensure text inside the card doesn't block the touch */
+.customer-card * {
+    pointer-events: none;
+}
+
+/* Re-enable touch for buttons inside the card */
+.customer-card button, 
+.customer-card select, 
+.customer-card input {
+    pointer-events: auto !important;
+}
+#dateJump::-webkit-calendar-picker-indicator {
+        width: 100%;
+        height: 100%;
+        position: absolute;
+        top: 0; left: 0;
+        opacity: 0;
+        cursor: pointer;
+    }

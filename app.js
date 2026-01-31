@@ -9,9 +9,10 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
 }
 
 const db = new Dexie("SaladDB");
-db.version(6).stores({ // Incremented to 6 to apply index change
-    customers: '++id, name, nickname, route, plan, status, vacationUntil, pendingAddonDate',
-    attendance: '++id, [custId+date], date, status, addons, isWalkIn, quantity, isVacation', // Added 'date' here
+// Around line 14 in app.js
+db.version(7).stores({ // Increment version to 7
+    customers: '++id, name, nickname, route, plan, status, vacationUntil, pendingAddonDate, mobile, discount',
+    attendance: '++id, [custId+date], date, status, addons, isWalkIn, quantity, isVacation',
     logs: '++id, timestamp, action'
 });
 
@@ -339,7 +340,7 @@ async function init() {
     }
     renderList();
 }
-async function showAddCustomer() {
+/*async function showAddCustomer() {
     const name = prompt("Enter Customer Full Name:");
     if (!name) return;
     const nickname = prompt("Enter Nickname (for quick view):");
@@ -356,7 +357,7 @@ async function showAddCustomer() {
     });
     
     renderList();
-}
+}*/
 
 // --- NEW FEATURE: MODAL CONTROLS ---
 function openModal(contentHtml, confirmAction) {
@@ -383,6 +384,9 @@ function showAddCustomer() {
         <div class="space-y-4">
             <input id="newCustName" type="text" placeholder="Full Name" class="w-full border p-3 rounded-lg">
             <input id="newCustNick" type="text" placeholder="Nickname" class="w-full border p-3 rounded-lg">
+            <input id="newCustMobile" type="tel" placeholder="Mobile Number (10 digits)" class="w-full border p-3 rounded-lg" maxlength="10">
+            <input id="newCustDiscount" type="number" placeholder="Discount %" class="w-full border p-3 rounded-lg">
+            
             <select id="newCustRoute" class="w-full border p-3 rounded-lg">
                 <option value="A">Route A</option>
                 <option value="B">Route B</option>
@@ -397,21 +401,48 @@ function showAddCustomer() {
     `;
 
     openModal(html, async () => {
-        const name = document.getElementById('newCustName').value;
-        const nickname = document.getElementById('newCustNick').value;
+        const name = document.getElementById('newCustName').value.trim();
+        const nickname = document.getElementById('newCustNick').value.trim();
+        const mobile = document.getElementById('newCustMobile').value.trim();
+        const discount = parseFloat(document.getElementById('newCustDiscount').value) || 0;
         const route = document.getElementById('newCustRoute').value;
         const plan = document.getElementById('newCustPlan').value;
 
-        if (name && nickname) {
-            await db.customers.add({
-                name, nickname, route, plan,
-                status: 'active',
-                vacationUntil: null
-            });
-            renderList();
+        // 1. Validation Logic
+        if (!name) {
+            alert("Please enter a Full Name.");
+            return false;
         }
+        /*if (!nickname) {
+            alert("Please enter a Nickname.");
+            return false;
+        }
+
+        // 2. Mobile Validation (Regex for exactly 10 digits)
+        const mobilePattern = /^[0-9]{10}$/;
+        if (!mobilePattern.test(mobile)) {
+            alert("Please enter a valid 10-digit mobile number.");
+            return false;
+        }*/
+
+        // If all validations pass, save to DB
+        await db.customers.add({
+            name, 
+            nickname, 
+            mobile,
+            discount,
+            route, 
+            plan,
+            status: 'active',
+            vacationUntil: null
+        });
+        
+        renderList();
+        return true;
     });
 }
+
+
 
 // --- NEW FEATURE: WALK-IN / IN-STORE ENTRY ---
 /*function showWalkIn() {
@@ -473,7 +504,7 @@ async function addAddon(custId) {
 let lastAction = null;
 
 function showUndo(text) {
-    const bar = document.getElementById('undoBar');
+   /* const bar = document.getElementById('undoBar');
     const textEl = document.getElementById('undoText');
     
     if (!bar || !textEl) return; // Guard against missing HTML elements
@@ -486,7 +517,7 @@ function showUndo(text) {
     setTimeout(() => {
         bar.classList.remove('visible');
         bar.classList.add('hidden');
-    }, 5000);
+    }, 5000);*/
 }
 
 async function undoLastAction() {
@@ -779,6 +810,8 @@ async function openEditModal(custId) {
     document.getElementById('editRoute').value = cust.route;
     document.getElementById('editPlan').value = cust.plan;
     document.getElementById('editStatus').value = cust.status || 'active';
+    document.getElementById('editDiscount').value = cust.discount || 0;
+    document.getElementById('editmobile').value = cust.mobile || '';
     
     document.getElementById('editModal').classList.remove('hidden');
 }
@@ -791,7 +824,9 @@ async function saveCustomerEdit() {
         nickname: document.getElementById('editNickname').value,
         route: document.getElementById('editRoute').value,
         plan: document.getElementById('editPlan').value,
-        status: document.getElementById('editStatus').value
+        status: document.getElementById('editStatus').value,
+        mobile: document.getElementById('editmobile').value ,
+        discount: parseFloat(document.getElementById('editDiscount').value) || 0
     };
 
     await db.customers.update(currentEditingId, update);
@@ -987,6 +1022,7 @@ async function generateCustomerInvoice(custId, monthYear) {
     const data = await db.attendance.where('date').startsWith(monthYear).toArray();
     const custData = data.filter(d => d.custId === cust.id && d.status === 'delivered');
     const addonsCount = custData.reduce((sum, d) => sum + (d.addons || 0), 0);
+    const discountPct = cust.discount || 0;
 
     // BRAND COLOR BACKGROUND (#f6f7f1)
     doc.setFillColor(246, 247, 241);
@@ -1016,8 +1052,10 @@ async function generateCustomerInvoice(custId, monthYear) {
     const unitPrice = (PRICES[cust.plan] || 5000) / 26;
     const saladTotal = custData.length * unitPrice;
     const addonTotal = addonsCount * 100;
-    const subTotal = (saladTotal + addonTotal); // e.g., 4999.80
-    const grandTotal = Math.ceil(subTotal);  // e.g., 5000
+    const discountAmount = ((saladTotal + addonTotal) * (discountPct / 100));
+    const subTotal = (saladTotal + addonTotal) - discountAmount; // e.g., 4999.80
+    const grandTotal = Math.round(subTotal);  // e.g., 5000
+    
     const roundOff = (grandTotal - subTotal); // e.g., 0.20
     // TABLE
     doc.autoTable({
@@ -1026,8 +1064,11 @@ async function generateCustomerInvoice(custId, monthYear) {
         body: [
             [`Salad bowls (${cust.plan})`, custData.length, unitPrice.toFixed(2), saladTotal.toFixed(2)],
             ['Extra Add-ons', addonsCount, '100', addonTotal.toFixed(2)],
+            ['', '', '', ''],
+            ['', '', 'Total', (saladTotal + addonTotal).toFixed(2)],
+            ['', '', 'Discount', discountAmount.toFixed(2)],
             ['', '', 'Sub Total', subTotal.toFixed(2)],
-            ['', '', 'Round Off', `(+) ${roundOff.toFixed(2)}`],
+            ['', '', 'Round Off', `${roundOff.toFixed(2)}`],
             ['', '', 'Grand Total', grandTotal.toString()+'.00'] // Final whole number
         ],
         headStyles: { fillColor: [21, 128, 61], halign: 'center'},

@@ -1312,6 +1312,49 @@ document.getElementById('syncToken').addEventListener('change', (e) => {
 
 window.addEventListener('load', initAutoSync);
 
+let deferredPrompt;
+const installBtn = document.getElementById('installBtn');
+
+// Listen for the browser's install prompt event
+window.addEventListener('beforeinstallprompt', (e) => {
+    // Prevent the default mini-infobar from appearing on mobile
+    e.preventDefault();
+    // Stash the event so it can be triggered later
+    deferredPrompt = e;
+    // Show our custom install button
+    if (installBtn) {
+        installBtn.classList.remove('hidden');
+    }
+});
+
+// Handle the button click
+if (installBtn) {
+    installBtn.addEventListener('click', async () => {
+        if (!deferredPrompt) return;
+        
+        // Show the native install prompt
+        deferredPrompt.prompt();
+        
+        // Wait for the user to respond to the prompt
+        const { outcome } = await deferredPrompt.userChoice;
+        console.log(`User response to install prompt: ${outcome}`);
+        
+        // We've used the prompt, and can't use it again
+        deferredPrompt = null;
+        
+        // Hide our button again
+        installBtn.classList.add('hidden');
+    });
+}
+
+// Optional: Hide the button if the app is already installed
+window.addEventListener('appinstalled', () => {
+    if (installBtn) {
+        installBtn.classList.add('hidden');
+    }
+    deferredPrompt = null;
+    console.log('PWA was installed');
+});
 
 
 init();

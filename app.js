@@ -537,7 +537,7 @@ async function undoLastAction() {
 
 //INVOICE
 
-async function generateAllInvoices() {
+/*async function generateAllInvoices() {
     const { jsPDF } = window.jspdf;
     const today = new Date();
     const monthNames = ["January", "February", "March", "April", "May", "June",
@@ -583,7 +583,7 @@ async function generateAllInvoices() {
         // Save file
         doc.save(`Invoice_${cust.nickname}_${monthNames[today.getMonth()]}.pdf`);
     }
-}
+}*/
 
 async function resumeVacationEarly(custId) {
     if (!confirm("Customer is back? This will clear future skipped records and make them active today.")) return;
@@ -981,6 +981,7 @@ async function renderInvoices() {
     const attendance = await db.attendance.where('date').startsWith(selectedMonth).toArray();
 
     container.innerHTML = '';
+    let grandTotal = 0; // Added for Version 2.1
 
     customers.forEach(cust => {
         const records = attendance.filter(a => a.custId === cust.id && a.status === 'delivered');
@@ -989,12 +990,15 @@ async function renderInvoices() {
         const saladCount = records.length;
         const addonCount = records.reduce((sum, r) => sum + (r.addons || 0), 0);
         const unitPrice = (PRICES[cust.plan] || 5000) / 26;
-        const total = (saladCount * unitPrice) + (addonCount * 100);
-
+        const sub_total = (saladCount * unitPrice) + (addonCount * 100);
+        const total = sub_total * (1-(cust.discount||0)/100);
+        
+        grandTotal += total; // Accumulate the total
+        // Currency Formatter for Indian Rupees
+        //const formattedTotal = Math.round(total).toLocaleString('en-IN');
         const card = document.createElement('div');
         card.className = "bg-white p-5 rounded-3xl shadow-sm border border-gray-100 flex justify-between items-center active:scale-95 transition-transform";
         
-        // Link to the Branded Generator
         card.onclick = () => generateCustomerInvoice(cust.id, selectedMonth);
 
         card.innerHTML = `
@@ -1009,7 +1013,15 @@ async function renderInvoices() {
         `;
         container.appendChild(card);
     });
+
+    // Minimal change: Find the header and update it with the total
+    const header = document.querySelector('#invoices');
+    if (header) {
+        const formattedGrandTotal = Math.round(grandTotal).toLocaleString('en-IN');
+        header.innerHTML = `Billing Period Total: <span class="ml-2 text-green-600 text-sm font-black">₹${formattedGrandTotal}</span>`;
+    }
 }
+
 
 // 3. The Branded PDF Generator (Mimicking Sample)
 async function generateCustomerInvoice(custId, monthYear) {

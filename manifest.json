@@ -3,7 +3,7 @@
   "short_name": "GrabbGreen",
   "start_url": "index.html",
   "display": "standalone",
-  "background_color": "#ffffff",
+  "background_color": "#f7f8f2",
   "theme_color": "#16a34a",
   "icons": [
     {

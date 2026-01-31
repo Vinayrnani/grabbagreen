@@ -1107,27 +1107,37 @@ async function pullFromCloud(token) {
         const doc = await fs.collection('sync_groups').doc(token).get();
         
         if (doc.exists) {
-            const cloud = doc.data().data;
+            const result = doc.data();
+            // Access the 'data' object we pushed earlier
+            const cloud = result.data || {}; 
 
             // Clear local Dexie tables
             await db.customers.clear();
             await db.attendance.clear();
             await db.logs.clear();
 
-            // Bulk add the cloud data
-            await db.customers.bulkAdd(cloud.customers);
-            await db.attendance.bulkAdd(cloud.attendance);
-            await db.logs.bulkAdd(cloud.logs);
+            // FIX: Add || [] to ensure we don't read .length of undefined
+            const customersToLoad = cloud.customers || [];
+            const attendanceToLoad = cloud.attendance || [];
+
+            if (customersToLoad.length > 0) {
+                await db.customers.bulkAdd(customersToLoad);
+            }
+            if (attendanceToLoad.length > 0) {
+                await db.attendance.bulkAdd(attendanceToLoad);
+            }
 
             alert("✅ Data Pulled Successfully! App will refresh.");
-            location.reload(); // Hard refresh to update all lists
+            location.reload(); 
         } else {
-            alert("No data found for this Token.");
+            alert("No data found for this Token. Push data from your main device first.");
         }
     } catch (error) {
+        console.error(error);
         alert("Error pulling data: " + error.message);
     }
 }
+
 
 
 // 1. Save Token whenever the user types in the input

@@ -1,3 +1,13 @@
+// Add this at the very top of app.js
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    navigator.serviceWorker.getRegistrations().then(function(registrations) {
+        for(let registration of registrations) {
+            // This forces the app to look for a new service worker on every load
+            registration.update(); 
+        }
+    });
+}
+
 const db = new Dexie("SaladDB");
 db.version(6).stores({ // Incremented to 6 to apply index change
     customers: '++id, name, nickname, route, plan, status, vacationUntil, pendingAddonDate',

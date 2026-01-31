@@ -12,6 +12,10 @@ const PRICES = { Regular: 5000, Premium: 6500, MealBox: 7800, WalkIn: 200, Addon
 //const getToday = () => new Date().toISOString().split('T')[0];
 
 async function renderList() {
+    // --- SCROLL FIX START ---
+    const scrollPos = window.scrollY;
+    // --- SCROLL FIX END ---
+
     const list = document.getElementById('attendanceList');
     list.innerHTML = ''; 
     
@@ -37,8 +41,6 @@ async function renderList() {
         const isCurrentlyInactive = c.status === 'inactive';
         return isCurrentlyInactive && !hasRecord;
     });
-
-
 
     // 3. RENDER ACTIVE/HISTORICAL CARDS
     for (const cust of activeCustomers) {
@@ -139,7 +141,12 @@ async function renderList() {
             list.appendChild(iCard);
         });
     }
+
+    // --- SCROLL FIX START ---
+    window.scrollTo(0, scrollPos);
+    // --- SCROLL FIX END ---
 }
+
 
 // Swipe Setup
 function setupSwipe(el, cust) {

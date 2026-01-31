@@ -93,26 +93,28 @@ async function renderList() {
         setupLongPress(card, cust.id);
 
         card.innerHTML = `
-            <div class="flex-1">
-                <div class="flex items-center gap-2">
-                    <span class="bg-gray-800 text-white text-[10px] px-2 py-0.5 rounded-full font-bold">${cust.route}</span>
-                    <h3 class="font-bold text-lg text-gray-900">${cust.name} ${addonBadge}</h3>
-                </div>
-                <p class="text-xs text-gray-600 font-semibold uppercase tracking-tighter">${cust.plan}</p>
-                <div class="mt-1">${statusConfig.badge || ''}</div>
-                ${!statusConfig.isLocked ? statusConfig.hint : ''}
-            </div>
-            <div class="flex flex-col gap-2">
-                ${statusConfig.isLocked && statusConfig.actionButton ? statusConfig.actionButton : ''}
-                ${!statusConfig.isLocked ? `
-                    <button onclick="openVacationModal(${cust.id})" class="text-[10px] bg-white border border-orange-300 text-orange-700 px-3 py-1.5 rounded-lg font-bold shadow-sm">VACATION</button>
-                    <button onclick="addAddon(${cust.id})" ${hasPendingAddon ? 'disabled' : ''} 
-                        class="text-[10px] ${hasPendingAddon ? 'bg-gray-100 text-gray-400 border-gray-200' : 'bg-white border-blue-300 text-blue-700'} px-3 py-1.5 rounded-lg font-bold shadow-sm">
-                        ${hasPendingAddon ? 'ADDON SET' : '+ ADDON'}
-                    </button>
-                ` : ''}
-            </div>
-        `;
+    <div class="flex-1">
+        <div class="flex items-center gap-2">
+            <span class="bg-gray-800 text-white text-[10px] px-2 py-0.5 rounded-full font-bold">${cust.route}</span>
+            <h3 class="font-bold text-lg text-gray-900">${cust.name} ${addonBadge}</h3>
+        </div>
+        <p class="text-xs text-gray-600 font-semibold uppercase tracking-tighter">${cust.plan}</p>
+        
+        <div class="h-8 flex items-center">
+            ${statusConfig.badge || (statusConfig.isLocked ? '' : statusConfig.hint)}
+        </div>
+    </div>
+    <div class="flex flex-col gap-2">
+        ${statusConfig.isLocked && statusConfig.actionButton ? statusConfig.actionButton : ''}
+        ${!statusConfig.isLocked ? `
+            <button onclick="openVacationModal(${cust.id})" class="text-[10px] bg-white border border-orange-300 text-orange-700 px-3 py-1.5 rounded-lg font-bold shadow-sm">VACATION</button>
+            <button onclick="addAddon(${cust.id})" ${hasPendingAddon ? 'disabled' : ''} 
+                class="text-[10px] ${hasPendingAddon ? 'bg-gray-100 text-gray-400 border-gray-200' : 'bg-white border-blue-300 text-blue-700'} px-3 py-1.5 rounded-lg font-bold shadow-sm">
+                ${hasPendingAddon ? 'ADDON SET' : '+ ADDON'}
+            </button>
+        ` : ''}
+    </div>
+`;
 
         if (!statusConfig.isLocked) {
             setupSwipe(card, cust);

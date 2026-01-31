@@ -1016,19 +1016,31 @@ async function generateCustomerInvoice(custId, monthYear) {
     const unitPrice = (PRICES[cust.plan] || 5000) / 26;
     const saladTotal = custData.length * unitPrice;
     const addonTotal = addonsCount * 100;
-
+    const subTotal = (saladTotal + addonTotal); // e.g., 4999.80
+    const grandTotal = Math.ceil(subTotal);  // e.g., 5000
+    const roundOff = (grandTotal - subTotal); // e.g., 0.20
     // TABLE
     doc.autoTable({
         startY: 80,
         head: [['PRODUCT', 'QUANTITY', 'UNIT PRICE', 'LINE TOTAL']],
         body: [
-            [`Salad bowls (${cust.plan})`, custData.length, Math.round(unitPrice), Math.round(saladTotal)],
-            ['Extra Add-ons', addonsCount, '100', addonTotal]
+            [`Salad bowls (${cust.plan})`, custData.length, unitPrice.toFixed(2), saladTotal.toFixed(2)],
+            ['Extra Add-ons', addonsCount, '100', addonTotal.toFixed(2)],
+            ['', '', 'Sub Total', subTotal.toFixed(2)],
+            ['', '', 'Round Off', `(+) ${roundOff.toFixed(2)}`],
+            ['', '', 'Grand Total', grandTotal.toString()+'.00'] // Final whole number
         ],
-        headStyles: { fillColor: [21, 128, 61] },
+        headStyles: { fillColor: [21, 128, 61], halign: 'center'},
         theme: 'grid',
-        styles: { fontStyle: 'bold' }
+        styles: { fontStyle: 'bold' },
+        columnStyles: {
+            1:{ halign: 'left' },
+            1:{ halign: 'right' },
+            2:{ halign: 'right' },
+            3: { halign: 'right' } // Only put borders on the last column
+    }
     });
+
 
     // FOOTER / PAYMENT
     const finalY = doc.lastAutoTable.finalY + 20;
@@ -1041,7 +1053,7 @@ async function generateCustomerInvoice(custId, monthYear) {
     doc.text("PhonePe: 9346379970", 20, finalY + 20);
 
     doc.setFontSize(14);
-    doc.text(`Total: INR ${Math.round(saladTotal + addonTotal)}`, 140, finalY + 20);
+    doc.text(`Total: INR ${grandTotal.toString()}.00`, 140, finalY + 20);
 
 // 6. Direct WhatsApp Sharing Logic
     const fileName = `Invoice_${cust.nickname || cust.name}_${monthName}.pdf`;
@@ -1258,5 +1270,7 @@ document.getElementById('syncToken').addEventListener('change', (e) => {
 });
 
 window.addEventListener('load', initAutoSync);
+
+
 
 init();

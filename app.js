@@ -1545,10 +1545,10 @@ async function removeHoliday(date) {
     renderList();
 }
 async function shareRouteList(route, date) {
+    // 1. Fetch data
     const attendance = await db.attendance.where('date').equals(date).toArray();
     const customers = await db.customers.where('route').equals(route).toArray();
     
-    // Filter to only those who are 'delivered' or 'pending' (exclude skips/vacations)
     const activeDeliveries = attendance.filter(a => 
         a.status === 'delivered' && 
         customers.some(c => c.id === a.custId)
@@ -1559,6 +1559,7 @@ async function shareRouteList(route, date) {
         return;
     }
 
+    // 2. Format message (Note: Using %0A for manual safety, but encodeURIComponent handles \n)
     let message = `🚚 *Delivery List: ${route}*\n📅 Date: ${date}\n--------------------------\n`;
     
     activeDeliveries.forEach((entry, index) => {
@@ -1569,9 +1570,12 @@ async function shareRouteList(route, date) {
 
     message += `\nTotal Deliveries: ${activeDeliveries.length}\n--------------------------`;
 
-    const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
-    window.open(whatsappUrl, '_blank');
+    // 3. SAFARI FIX: Use wa.me and location.assign
+    // This bypasses the popup blocker because it's a redirect, not a new window.
+    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+    window.location.assign(whatsappUrl);
 }
+
 async function openRouteShareSelector() {
     const allCustomers = await db.customers.toArray();
     const routes = [...new Set(allCustomers.map(c => c.route))].filter(Boolean);

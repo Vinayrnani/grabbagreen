@@ -1060,7 +1060,7 @@ async function renderInvoices() {
         // If salads < 70% of working days, use WalkIn price. Else use Plan price/26.
         const unitPrice = (saladCount >= threshold) 
             ? (PRICES[cust.plan] || 5000) / 26 
-            : (PRICES.WalkIn || 200);
+            : (cust.plan === 'Regular' ? (PRICES.WalkIn || 200) : 250);
 
         const sub_total = (saladCount * unitPrice) + (addonCount * 100);
         const total = sub_total * (1 - (cust.discount || 0) / 100);
@@ -1123,7 +1123,9 @@ async function generateCustomerInvoice(custId, monthYear) {
     const isSubscriber = Math.round(attendanceRate) >= 75;
     
     // Package price 5000/26 if >= 70%, otherwise Retail (assume 250 or adjust as per your PRICES object)
-    const unitPrice = isSubscriber ? ((PRICES[cust.plan] || 5000) / 26) : PRICES['WalkIn']; 
+    const unitPrice = isSubscriber 
+        ? ((PRICES[cust.plan] || 5000) / 26) 
+        : (cust.plan === 'Regular' ? (PRICES.WalkIn || 200) : 250);
     // --- END NEW LOGIC ---
 
     // BRAND COLOR BACKGROUND (#f6f7f1)

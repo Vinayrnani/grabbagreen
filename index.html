@@ -8,7 +8,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-   
+
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>Salad Master Attendance</title>
@@ -20,12 +20,12 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
     <script>
-    // Register Service Worker
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('sw.js')
-        .then(() => console.log("v2.0 PWA Registered"))
-        .catch(err => console.log("PWA Sync Error", err));
-    }
+        // Register Service Worker
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js')
+                .then(() => console.log("v2.0 PWA Registered"))
+                .catch(err => console.log("PWA Sync Error", err));
+        }
     </script>
 </head>
 
@@ -33,30 +33,36 @@
 
 
 
-<header class="bg-white border-b border-gray-100 sticky top-0 z-50">
-    <div class="flex justify-center py-2 mb-3" style="background-color: #f6f7f1;">
-        <img src="logo.jpg" alt="Grabb A Green" class="h-14 w-auto object-contain">
-    </div>
-
-    <div class="flex items-center justify-center relative px-4 pb-3">
-        <div id="mainDatePicker" class="relative inline-block">
-            <div   class="flex items-center gap-2 px-6 py-2 bg-gray-50 rounded-full border border-gray-200">
-                <span id="displayDate" class="text-xs font-black uppercase tracking-widest text-gray-700">Today</span>
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                </svg>
-            </div>
-            <input type="date" id="dateJump" onchange="changeAppDate(this.value)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+    <header class="bg-white border-b border-gray-100 sticky top-0 z-50">
+        <div class="flex justify-center py-2 mb-3" style="background-color: #f6f7f1;">
+            <img src="logo.jpg" alt="Grabb A Green" class="h-14 w-auto object-contain">
         </div>
 
-        <button onclick="toggleSettings()" class="absolute right-4 p-2 text-gray-400 hover:text-green-600">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-        </button>
-    </div>
-</header>
+        <div class="flex items-center justify-center relative px-4 pb-3">
+            <div id="mainDatePicker" class="relative inline-block">
+                <div class="flex items-center gap-2 px-6 py-2 bg-gray-50 rounded-full border border-gray-200">
+                    <span id="displayDate"
+                        class="text-xs font-black uppercase tracking-widest text-gray-700">Today</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400" fill="none"
+                        viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                </div>
+                <input type="date" id="dateJump" onchange="changeAppDate(this.value)"
+                    class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+            </div>
+
+            <button onclick="toggleSettings()" class="absolute right-4 p-2 text-gray-400 hover:text-green-600">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+            </button>
+        </div>
+    </header>
 
     <div id="settingsDrawer" class="fixed inset-0 z-[150] hidden">
         <div class="absolute inset-0 bg-black bg-opacity-60 backdrop-blur-sm" onclick="toggleSettings()"></div>
@@ -71,107 +77,123 @@
                 class="flex items-center gap-3 w-full p-3 bg-gray-50 rounded-xl hover:bg-gray-100 font-bold text-gray-700">
                 <span>📥 Restore Data</span>
             </button>
-            <button id="installBtn" class="hidden w-full bg-blue-600 text-white py-3 rounded-xl font-bold mb-4 shadow-lg">
-    📲 Install App to Home Screen
-</button>
+            <div class="p-4 space-y-3">
+                <h3 class="text-[10px] font-black text-gray-400 uppercase tracking-widest px-2">App Configurations</h3>
+                <button onclick="openHolidayManager()"
+                class="flex items-center gap-3 w-full p-3 bg-gray-50 rounded-xl hover:bg-gray-100 font-bold text-gray-700">
+                <span>📅 Holiday List</span>
+            </button>
+                
+
+            </div>
+            <button id="installBtn"
+                class="hidden w-full bg-blue-600 text-white py-3 rounded-xl font-bold mb-4 shadow-lg">
+                📲 Install App to Home Screen
+            </button>
             <div class="mt-6 pt-6 border-t border-gray-100">
-    <div class="flex items-center gap-2 mb-4">
-        <span class="text-lg">☁️</span>
-        <h3 class="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400">Cloud Sync (Beta)</h3>
-    </div>
+                <div class="flex items-center gap-2 mb-4">
+                    <span class="text-lg">☁️</span>
+                    <h3 class="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400">Cloud Sync (Beta)</h3>
+                </div>
 
-    <div class="space-y-3">
-        <div class="relative">
-            <input type="text" id="syncToken" placeholder="Enter Sync Token (e.g. GRABB-01)" 
-                   class="w-full p-4 bg-[#f6f7f1] rounded-2xl border-none font-bold text-gray-700 text-sm focus:ring-2 focus:ring-green-600">
-        </div>
+                <div class="space-y-3">
+                    <div class="relative">
+                        <input type="text" id="syncToken" placeholder="Enter Sync Token (e.g. GRABB-01)"
+                            class="w-full p-4 bg-[#f6f7f1] rounded-2xl border-none font-bold text-gray-700 text-sm focus:ring-2 focus:ring-green-600">
+                    </div>
 
-        <div class="grid grid-cols-2 gap-3">
-            <button onclick="syncToCloud(document.getElementById('syncToken').value)" 
-                    class="flex flex-col items-center justify-center bg-green-600 text-white p-3 rounded-2xl active:scale-95 transition-transform">
-                <span class="text-sm font-black uppercase tracking-tighter">Push</span>
-                <span class="text-[8px] opacity-80 font-bold uppercase">To Cloud</span>
-            </button>
-            
-            <button onclick="pullFromCloud(document.getElementById('syncToken').value)" 
-                    class="flex flex-col items-center justify-center bg-gray-800 text-white p-3 rounded-2xl active:scale-95 transition-transform">
-                <span class="text-sm font-black uppercase tracking-tighter">Pull</span>
-                <span class="text-[8px] opacity-80 font-bold uppercase">From Cloud</span>
-            </button>
-        </div>
-        
-        <p class="text-[9px] text-center text-gray-400 font-medium italic mt-2">
-            * Pulling data will replace current device records.
-        </p>
-    </div>
-</div>
-<div class="flex items-center justify-between bg-[#f6f7f1] p-3 rounded-2xl mb-3">
-    <div class="flex flex-col">
-        <span class="text-[10px] font-black uppercase text-gray-800">Auto-Sync</span>
-        <span id="syncStatusLabel" class="text-[8px] font-bold text-gray-400 uppercase">Status: Idle</span>
-    </div>
-    <label class="relative inline-flex items-center cursor-pointer">
-        <input type="checkbox" id="autoSyncToggle" class="sr-only peer">
-        <div class="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
-    </label>
-</div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <button onclick="syncToCloud(document.getElementById('syncToken').value)"
+                            class="flex flex-col items-center justify-center bg-green-600 text-white p-3 rounded-2xl active:scale-95 transition-transform">
+                            <span class="text-sm font-black uppercase tracking-tighter">Push</span>
+                            <span class="text-[8px] opacity-80 font-bold uppercase">To Cloud</span>
+                        </button>
+
+                        <button onclick="pullFromCloud(document.getElementById('syncToken').value)"
+                            class="flex flex-col items-center justify-center bg-gray-800 text-white p-3 rounded-2xl active:scale-95 transition-transform">
+                            <span class="text-sm font-black uppercase tracking-tighter">Pull</span>
+                            <span class="text-[8px] opacity-80 font-bold uppercase">From Cloud</span>
+                        </button>
+                    </div>
+
+                    <p class="text-[9px] text-center text-gray-400 font-medium italic mt-2">
+                        * Pulling data will replace current device records.
+                    </p>
+                </div>
+            </div>
+            <div class="flex items-center justify-between bg-[#f6f7f1] p-3 rounded-2xl mb-3">
+                <div class="flex flex-col">
+                    <span class="text-[10px] font-black uppercase text-gray-800">Auto-Sync</span>
+                    <span id="syncStatusLabel" class="text-[8px] font-bold text-gray-400 uppercase">Status: Idle</span>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="autoSyncToggle" class="sr-only peer">
+                    <div
+                        class="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600">
+                    </div>
+                </label>
+            </div>
             <div class="mt-auto text-[10px] text-gray-400 text-center uppercase tracking-widest">
-                Grabb a Green v2.0
+                Grabb a Green v3.0
             </div>
         </div>
     </div>
 
 
-<main class="p-3 pb-32">
-    <div id="dailyScreen">
-        <section class="bg-white rounded-3xl p-3 shadow-sm border border-gray-100 mb-6">
-            <div class="flex items-center justify-between mb-2 border-b border-gray-50 pb-1">
-                <h2 class="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400">Daily Walk-In Sales</h2>
-            </div>
-            <div class="grid grid-cols-2 gap-3">
-                <div class="bg-[#f6f7f1] rounded-2xl p-2 flex flex-col items-center">
-                    <span class="text-[9px] font-bold text-gray-500 mb-1 uppercase">Salads</span>
-                    <div class="flex items-center gap-3">
-                        <button onclick="updateWalkIn('salad', -1)" class="w-7 h-7 rounded-full bg-white shadow-sm flex items-center justify-center font-bold text-gray-400">-</button>
-                        <span id="walkInSaladCount" class="text-lg font-black text-gray-800">0</span>
-                        <button onclick="updateWalkIn('salad', 1)" class="w-7 h-7 rounded-full bg-white shadow-sm flex items-center justify-center font-bold text-gray-400">+</button>
+    <main class="p-3 pb-32">
+        <div id="dailyScreen">
+            <section id="walkinContainer" class="bg-white rounded-3xl p-3 shadow-sm border border-gray-100 mb-6">
+                <div class="flex items-center justify-between mb-2 border-b border-gray-50 pb-1">
+                    <h2 class="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400">Daily Walk-In Sales</h2>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="bg-[#f6f7f1] rounded-2xl p-2 flex flex-col items-center">
+                        <span class="text-[9px] font-bold text-gray-500 mb-1 uppercase">Salads</span>
+                        <div class="flex items-center gap-3">
+                            <button onclick="updateWalkIn('salad', -1)"
+                                class="w-7 h-7 rounded-full bg-white shadow-sm flex items-center justify-center font-bold text-gray-400">-</button>
+                            <span id="walkInSaladCount" class="text-lg font-black text-gray-800">0</span>
+                            <button onclick="updateWalkIn('salad', 1)"
+                                class="w-7 h-7 rounded-full bg-white shadow-sm flex items-center justify-center font-bold text-gray-400">+</button>
+                        </div>
+                    </div>
+                    <div class="bg-[#f6f7f1] rounded-2xl p-2 flex flex-col items-center">
+                        <span class="text-[9px] font-bold text-gray-500 mb-1 uppercase">Add-Ons</span>
+                        <div class="flex items-center gap-3">
+                            <button onclick="updateWalkIn('addon', -1)"
+                                class="w-7 h-7 rounded-full bg-white shadow-sm flex items-center justify-center font-bold text-gray-400">-</button>
+                            <span id="walkInAddonCount" class="text-lg font-black text-gray-800">0</span>
+                            <button onclick="updateWalkIn('addon', 1)"
+                                class="w-7 h-7 rounded-full bg-white shadow-sm flex items-center justify-center font-bold text-gray-400">+</button>
+                        </div>
                     </div>
                 </div>
-                <div class="bg-[#f6f7f1] rounded-2xl p-2 flex flex-col items-center">
-                    <span class="text-[9px] font-bold text-gray-500 mb-1 uppercase">Add-Ons</span>
-                    <div class="flex items-center gap-3">
-                        <button onclick="updateWalkIn('addon', -1)" class="w-7 h-7 rounded-full bg-white shadow-sm flex items-center justify-center font-bold text-gray-400">-</button>
-                        <span id="walkInAddonCount" class="text-lg font-black text-gray-800">0</span>
-                        <button onclick="updateWalkIn('addon', 1)" class="w-7 h-7 rounded-full bg-white shadow-sm flex items-center justify-center font-bold text-gray-400">+</button>
-                    </div>
-                </div>
+            </section>
+
+            <div>
+                <h2 id="subtext" class="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 px-2 mb-3">Subscribed
+                    Customers</h2>
+                <div id="attendanceList" class="space-y-3"></div>
             </div>
-        </section>
-
-        <div>
-            <h2 class="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 px-2 mb-3">Subscribed Customers</h2>
-            <div id="attendanceList" class="space-y-3"></div>
         </div>
-    </div>
 
-    <div id="invoiceScreen" class="hidden">
-        <div class="bg-white rounded-3xl p-4 shadow-sm border border-gray-100 mb-4">
-            <h3 id="invoices" class="text-sm font-black italic mb-3 uppercase tracking-tighter">Billing Period</h3>
-            <input type="month" id="invoiceMonthPicker" 
-                   onchange="renderInvoices()" 
-                   class="w-full p-4 bg-gray-50 rounded-2xl border-none font-bold text-gray-700">
-        </div>
-        <div id="invoiceListContainer" class="space-y-3">
+        <div id="invoiceScreen" class="hidden">
+            <div class="bg-white rounded-3xl p-4 shadow-sm border border-gray-100 mb-4">
+                <h3 id="invoices" class="text-sm font-black italic mb-3 uppercase tracking-tighter">Billing Period</h3>
+                <input type="month" id="invoiceMonthPicker" onchange="renderInvoices()"
+                    class="w-full p-4 bg-gray-50 rounded-2xl border-none font-bold text-gray-700">
             </div>
-    </div>
-</main>
+            <div id="invoiceListContainer" class="space-y-3">
+            </div>
+        </div>
+    </main>
 
-    
+
     <div id="undoBar"
-    class="fixed left-4 right-4 bg-gray-800 text-white p-3 rounded-lg shadow-2xl flex justify-between items-center hidden transition-all">
-    <span id="undoText">Action saved</span>
-    <button onclick="undoLastAction()" class="text-yellow-400 font-bold uppercase text-sm">Undo</button>
-</div>
+        class="fixed left-4 right-4 bg-gray-800 text-white p-3 rounded-lg shadow-2xl flex justify-between items-center hidden transition-all">
+        <span id="undoText">Action saved</span>
+        <button onclick="undoLastAction()" class="text-yellow-400 font-bold uppercase text-sm">Undo</button>
+    </div>
     <div id="modalOverlay"
         class="fixed inset-0 bg-black bg-opacity-50 z-[100] hidden flex items-center justify-center p-4">
         <div class="bg-white w-full max-w-md rounded-2xl p-6 shadow-2xl">
@@ -185,22 +207,26 @@
         </div>
     </div>
     <div id="actionMenu" class="fixed inset-0 z-[250] hidden flex items-end justify-center p-4">
-    <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" onclick="closeActionMenu()"></div>
-    <div class="relative bg-white w-full max-w-sm rounded-t-3xl p-6 shadow-2xl animate-slide-up">
-        <h2 id="actionMenuTitle" class="text-sm font-black text-gray-400 uppercase tracking-widest mb-4 text-center">Customer Options</h2>
-        <div class="space-y-3">
-            <button onclick="handleMenuEdit()" class="w-full flex items-center justify-between p-4 bg-gray-50 rounded-2xl font-bold text-gray-800 active:bg-gray-100">
-                <span>✏️ Edit Profile</span>
-                <span class="text-gray-400">→</span>
-            </button>
-            <button id="resetActionBtn" onclick="handleMenuReset()" class="w-full flex items-center justify-between p-4 bg-red-50 rounded-2xl font-bold text-red-600 active:bg-red-100">
-                <span>🔄 Reset Attendance</span>
-                <span class="text-red-400">→</span>
-            </button>
-            <button onclick="closeActionMenu()" class="w-full p-4 text-gray-400 font-bold">Cancel</button>
+        <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" onclick="closeActionMenu()"></div>
+        <div class="relative bg-white w-full max-w-sm rounded-t-3xl p-6 shadow-2xl animate-slide-up">
+            <h2 id="actionMenuTitle"
+                class="text-sm font-black text-gray-400 uppercase tracking-widest mb-4 text-center">Customer Options
+            </h2>
+            <div class="space-y-3">
+                <button onclick="handleMenuEdit()"
+                    class="w-full flex items-center justify-between p-4 bg-gray-50 rounded-2xl font-bold text-gray-800 active:bg-gray-100">
+                    <span>✏️ Edit Profile</span>
+                    <span class="text-gray-400">→</span>
+                </button>
+                <button id="resetActionBtn" onclick="handleMenuReset()"
+                    class="w-full flex items-center justify-between p-4 bg-red-50 rounded-2xl font-bold text-red-600 active:bg-red-100">
+                    <span>🔄 Reset Attendance</span>
+                    <span class="text-red-400">→</span>
+                </button>
+                <button onclick="closeActionMenu()" class="w-full p-4 text-gray-400 font-bold">Cancel</button>
+            </div>
         </div>
     </div>
-</div>
     <div id="editModal" class="fixed inset-0 z-[200] hidden flex items-center justify-center p-4">
         <div class="absolute inset-0 bg-black/70 backdrop-blur-md" onclick="closeEditModal()"></div>
         <div class="relative bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl overflow-y-auto max-h-[90vh]">
@@ -245,9 +271,11 @@
 
                 <div class="grid grid-cols-2 gap-4">
                     <div>
-    <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Mobile Number</label>
-    <input type="tel" id="editmobile" class="w-full bg-gray-100 p-3 rounded-xl border-none focus:ring-2 focus:ring-green-500" placeholder="Enter 10 digit number">
-</div>
+                        <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Mobile Number</label>
+                        <input type="tel" id="editmobile"
+                            class="w-full bg-gray-100 p-3 rounded-xl border-none focus:ring-2 focus:ring-green-500"
+                            placeholder="Enter 10 digit number">
+                    </div>
                     <div>
                         <label class="text-[10px] font-bold text-gray-400 uppercase">Discount %</label>
                         <input type="number" id="editDiscount"
@@ -272,19 +300,45 @@
             </div>
         </div>
     </div>
-<button onclick="showAddCustomer()" 
-    class="fixed bottom-24 right-6 w-14 h-14 bg-green-600 text-white rounded-full shadow-2xl flex items-center justify-center text-2xl font-bold z-40 active:scale-90 transition-transform">
-    +
-</button>
+    <button onclick="showAddCustomer()"
+        class="fixed bottom-24 right-6 w-14 h-14 bg-green-600 text-white rounded-full shadow-2xl flex items-center justify-center text-2xl font-bold z-40 active:scale-90 transition-transform">
+        +
+    </button>
+    <div id="holidayModal"
+        class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+        <div class="bg-white rounded-[2rem] w-full max-w-sm overflow-hidden shadow-2xl animate-fadeInUp">
+            <div class="p-8">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-xl font-black text-gray-800 uppercase tracking-tight">Holidays</h2>
+                    <span
+                        class="bg-blue-100 text-blue-600 text-[10px] font-black px-2 py-1 rounded-lg uppercase">Settings</span>
+                </div>
 
+                <div class="flex gap-2 mb-6">
+                    <input type="date" id="holidayInput"
+                        class="flex-1 border-2 border-gray-100 rounded-xl px-4 py-3 text-sm font-bold bg-gray-50 focus:border-blue-500 outline-none transition-colors">
+                    <button onclick="saveHoliday()"
+                        class="bg-blue-600 text-white px-5 rounded-xl font-black text-xs uppercase shadow-lg shadow-blue-200 active:scale-90 transition-all">Add</button>
+                </div>
+
+                <div id="holidayListItems" class="max-h-64 overflow-y-auto mb-6 pr-2 custom-scrollbar">
+                </div>
+
+                <button onclick="document.getElementById('holidayModal').classList.add('hidden')"
+                    class="w-full bg-gray-900 text-white py-4 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl active:scale-95 transition-all">
+                    Close Manager
+                </button>
+            </div>
+        </div>
+    </div>
     <footer class="fixed bottom-0 w-full bg-white border-t flex justify-around p-3 text-gray-600">
         <button onclick="showTab('attendance')" class="flex flex-col items-center text-green-600">
             <span>📅</span><span class="text-xs">Daily</span>
         </button>
         <button onclick="showTab('invoices')" class="flex flex-col items-center">
-    <span>📄</span><span class="text-xs">Invoices</span>
-</button>
-        
+            <span>📄</span><span class="text-xs">Invoices</span>
+        </button>
+
     </footer>
 
     <script src="app.js"></script>

@@ -1673,7 +1673,7 @@ async function hardRefreshApp() {
 
         // 3. Force reload from server with a cache-busting timestamp
         const timestamp = Date.now();
-        window.location.href = window.origin + '?reload=' + timestamp;
+        window.location.href = window.location.href + '?reload=' + timestamp;
 
     } catch (error) {
         console.error("Hard refresh failed:", error);

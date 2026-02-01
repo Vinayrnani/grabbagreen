@@ -1648,5 +1648,37 @@ async function processRouteShare(route) {
     document.getElementById('routeShareModal').classList.add('hidden');
     window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`, '_blank');
 }
+async function hardRefreshApp() {
+    // Show a confirmation so the user doesn't do it by mistake
+    //if (!confirm("This will clear the app cache and reload. Continue?")) return;
 
+    try {
+        // 1. Clear all named caches (where JS, CSS, and HTML are stored)
+        if ('caches' in window) {
+            const cacheNames = await caches.keys();
+            await Promise.all(
+                cacheNames.map(name => caches.delete(name))
+            );
+            console.log("Caches cleared.");
+        }
+
+        // 2. Unregister the Service Worker
+        if ('serviceWorker' in navigator) {
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            for (let registration of registrations) {
+                await registration.unregister();
+            }
+            console.log("Service Worker unregistered.");
+        }
+
+        // 3. Force reload from server with a cache-busting timestamp
+        const timestamp = Date.now();
+        window.location.href = window.origin + '/?reload=' + timestamp;
+
+    } catch (error) {
+        console.error("Hard refresh failed:", error);
+        // Fallback: simple reload
+        window.location.reload(true);
+    }
+}
 init();

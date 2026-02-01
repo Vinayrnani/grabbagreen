@@ -695,34 +695,36 @@ function toggleSettings() {
 // EXPORT: Save all data to a file
 async function exportData() {
     try {
-        const customers = await db.customers.toArray();
-        const attendance = await db.attendance.toArray();
-        
         const backupData = {
-            version: 1,
+            version: 2,
             timestamp: new Date().toISOString(),
-            customers: customers,
-            attendance: attendance
+            tables: {}
         };
+
+        // Enumerate all tables dynamically
+        for (const table of db.tables) {
+            backupData.tables[table.name] = await table.toArray();
+        }
 
         const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         
         const a = document.createElement('a');
         a.href = url;
-        a.download = `GrabbAGreen_Backup_${getToday()}.json`;
+        a.download = `GrabbAGreen_Full_Backup_${getToday()}.json`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
         
-        showUndo("Backup downloaded successfully!");
-        toggleSettings(); // Close the menu
+        showUndo("Full backup downloaded!");
+        toggleSettings();
     } catch (e) {
         console.error("Export failed:", e);
         alert("Export failed: " + e.message);
     }
 }
+
 
 // IMPORT: Restore data from a file
 async function importData() {
@@ -737,19 +739,23 @@ async function importData() {
         reader.onload = async (event) => {
             try {
                 const data = JSON.parse(event.target.result);
-                
-                if (!confirm("This will overwrite your current data. Are you sure?")) return;
+                if (!confirm("Overwrite ALL local tables with backup data?")) return;
 
-                // Clear current tables
-                await db.customers.clear();
-                await db.attendance.clear();
+                // Handle both old format and new 'tables' format
+                const tablesToRestore = data.tables || data;
 
-                // Restore data
-                await db.customers.bulkAdd(data.customers);
-                await db.attendance.bulkAdd(data.attendance);
+                // Loop through tables found in backup
+                for (const tableName in tablesToRestore) {
+                    if (db[tableName]) {
+                        await db[tableName].clear();
+                        if (tablesToRestore[tableName].length > 0) {
+                            await db[tableName].bulkAdd(tablesToRestore[tableName]);
+                        }
+                    }
+                }
 
-                alert("Data restored successfully!");
-                location.reload(); // Refresh app to show new data
+                alert("All tables restored successfully!");
+                location.reload();
             } catch (err) {
                 console.error("Import failed:", err);
                 alert("Invalid backup file.");
@@ -759,6 +765,7 @@ async function importData() {
     };
     input.click();
 }
+
 
 let currentEditingId = null;
 
@@ -1237,63 +1244,51 @@ async function syncToCloud(token) {
         return;
     }
 
-    // Show loading state on button if possible
-    console.log("Starting Push...");
-    
     try {
-        const customers = await db.customers.toArray();
-        const attendance = await db.attendance.toArray();
-        // Include walk-ins and logs if needed
-        const logs = await db.logs.limit(100).toArray(); 
+        const allData = {};
+        // Enumerate all tables for sync
+        for (const table of db.tables) {
+            allData[table.name] = await table.toArray();
+        }
 
         await fs.collection('sync_groups').doc(token).set({
             token: token,
             lastUpdated: new Date().toISOString(),
             deviceInfo: navigator.userAgent.substring(0, 20),
-            data: {
-                customers,
-                attendance,
-                logs
-            }
+            data: allData // Contains every table
         });
 
-        alert("✅ Cloud Backup Successful!");
+        alert("✅ Full Cloud Backup Successful!");
     } catch (error) {
         console.error("Sync Error:", error);
-        alert("❌ Sync Failed. Check internet/Firebase config.");
+        alert("❌ Sync Failed. Check internet.");
     }
 }
 
+
 async function pullFromCloud(token) {
     if (!token) return;
-    
-    if (!confirm("This will DELETE local data and replace it with Cloud data. Continue?")) return;
+    if (!confirm("This will DELETE all local data and replace it with Cloud data. Continue?")) return;
 
     try {
         const doc = await fs.collection('sync_groups').doc(token).get();
         
         if (doc.exists) {
             const result = doc.data();
-            // Access the 'data' object we pushed earlier
-            const cloud = result.data || {}; 
+            const cloudData = result.data || {}; 
 
-            // Clear local Dexie tables
-            await db.customers.clear();
-            await db.attendance.clear();
-            await db.logs.clear();
-
-            // FIX: Add || [] to ensure we don't read .length of undefined
-            const customersToLoad = cloud.customers || [];
-            const attendanceToLoad = cloud.attendance || [];
-
-            if (customersToLoad.length > 0) {
-                await db.customers.bulkAdd(customersToLoad);
-            }
-            if (attendanceToLoad.length > 0) {
-                await db.attendance.bulkAdd(attendanceToLoad);
+            // Loop through all tables in the database
+            for (const table of db.tables) {
+                const tableName = table.name;
+                await db[tableName].clear(); // Clear local table
+                
+                // If cloud data has this table, restore it
+                if (cloudData[tableName] && cloudData[tableName].length > 0) {
+                    await db[tableName].bulkAdd(cloudData[tableName]);
+                }
             }
 
-            alert("✅ Data Pulled Successfully! App will refresh.");
+            alert("✅ All tables Pulled Successfully!");
             location.reload(); 
         } else {
             alert("No data found for this Token. Push data from your main device first.");
@@ -1303,6 +1298,7 @@ async function pullFromCloud(token) {
         alert("Error pulling data: " + error.message);
     }
 }
+
 
 
 
@@ -1358,7 +1354,7 @@ function startTimer() {
     // Immediate attempt on start, then every 15 mins
     performSilentPush(); 
     
-    syncInterval = setInterval(performSilentPush, 15 * 60 * 1000); 
+    syncInterval = setInterval(performSilentPush, 1 * 60 * 1000); 
 }
 
 async function performSilentPush() {
@@ -1368,22 +1364,63 @@ async function performSilentPush() {
     if (!token || !isEnabled) return;
 
     try {
-        const customers = await db.customers.toArray();
-        const attendance = await db.attendance.toArray();
-        
-        // Push to Firebase
+        const allData = {};
+        for (const table of db.tables) {
+            allData[table.name] = await table.toArray();
+        }
+
+        const now = new Date();
+        const dateSuffix = now.toISOString().split('T')[0]; 
+        const dailyToken = `${token}_${dateSuffix}`;
+        const timestamp = now.toISOString();
+
+        // 1. Update the main LIVE sync document
         await fs.collection('sync_groups').doc(token).set({
-            lastUpdated: new Date().toISOString(),
-            data: { customers, attendance }
-        });
+            lastUpdated: timestamp,
+            deviceInfo: navigator.userAgent.substring(0, 20),
+            data: allData
+        }, { merge: true });
+
+        // 2. DAILY SNAPSHOT LOGIC
+        const dailyDocRef = fs.collection('sync_groups').doc(dailyToken);
+        const dailyDoc = await dailyDocRef.get();
+
+        if (!dailyDoc.exists) {
+            console.log(`Creating daily snapshot: ${dailyToken}`);
+            await dailyDocRef.set({
+                token: token,
+                isSnapshot: true,
+                snapshotDate: dateSuffix,
+                lastUpdated: timestamp,
+                data: allData
+            });
+
+            // 3. RETENTION LOGIC (Run only once a day when a new snapshot is made)
+            const thirtyDaysAgo = new Date();
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+            const cutoffDate = thirtyDaysAgo.toISOString().split('T')[0];
+
+            const oldSnapshots = await fs.collection('sync_groups')
+                .where('token', '==', token)
+                .where('isSnapshot', '==', true)
+                .where('snapshotDate', '<', cutoffDate)
+                .get();
+
+            const batch = fs.batch(); // Use a batch for efficient deletion
+            oldSnapshots.forEach(doc => {
+                batch.delete(doc.ref);
+                console.log("Cleaning up old backup:", doc.id);
+            });
+            await batch.commit();
+        }
         
         updateSyncLabel("Synced");
     } catch (e) {
-        // If network is bad, it fails silently and stays "Active" to try again later
-        console.warn("Auto-sync failed (Bad Network):", e);
+        console.warn("Auto-sync failed:", e);
         updateSyncLabel("Waiting for Connection");
     }
 }
+
 
 function updateSyncLabel(status) {
     const label = document.getElementById('syncStatusLabel');

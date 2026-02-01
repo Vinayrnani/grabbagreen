@@ -75,6 +75,9 @@ async function renderList() {
     // --- HOLIDAY & SUNDAY CHECK END ---
 
     let allCustomers = await db.customers.toArray();
+    const routes = [...new Set(allCustomers.map(c => c.route))].filter(Boolean);
+    const shareBar = document.getElementById('routeShareBar');
+
     
     // Get all attendance for the date we are currently viewing
     const dayAttendance = await db.attendance.where('date').equals(viewDate).toArray();
@@ -1482,6 +1485,102 @@ async function removeHoliday(date) {
     await db.settings.put({ id: 'holidayList', value: holidays });
     renderHolidayList();
     renderList();
+}
+async function shareRouteList(route, date) {
+    const attendance = await db.attendance.where('date').equals(date).toArray();
+    const customers = await db.customers.where('route').equals(route).toArray();
+    
+    // Filter to only those who are 'delivered' or 'pending' (exclude skips/vacations)
+    const activeDeliveries = attendance.filter(a => 
+        a.status === 'delivered' && 
+        customers.some(c => c.id === a.custId)
+    );
+
+    if (activeDeliveries.length === 0) {
+        alert(`No deliveries scheduled for ${route} on this date.`);
+        return;
+    }
+
+    let message = `🚚 *Delivery List: ${route}*\n📅 Date: ${date}\n--------------------------\n`;
+    
+    activeDeliveries.forEach((entry, index) => {
+        const cust = customers.find(c => c.id === entry.custId);
+        message += `${index + 1}. *${cust.name}* ${cust.nickname ? `(${cust.nickname})` : ''}\n`;
+        if (entry.addons > 0) message += `   ➕ Add-ons: ${entry.addons}\n`;
+    });
+
+    message += `\nTotal Deliveries: ${activeDeliveries.length}\n--------------------------`;
+
+    const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
+    window.open(whatsappUrl, '_blank');
+}
+async function openRouteShareSelector() {
+    const allCustomers = await db.customers.toArray();
+    const routes = [...new Set(allCustomers.map(c => c.route))].filter(Boolean);
+    const container = document.getElementById('routeOptionsList');
+    
+    container.innerHTML = routes.map(route => `
+        <button onclick="processRouteShare('${route}')" 
+            class="w-full bg-gray-50 hover:bg-green-50 text-gray-700 font-bold py-4 px-4 rounded-2xl border border-gray-100 flex justify-between items-center transition-all">
+            <span>${route}</span>
+            <span class="text-green-500">📲</span>
+        </button>
+    `).join('');
+
+    document.getElementById('routeShareModal').classList.remove('hidden');
+}
+
+async function processRouteShare(route) {
+    const dateInput = document.getElementById('dateJump'); 
+    const date = dateInput ? dateInput.value : new Date().toISOString().split('T')[0];
+
+    const attendance = await db.attendance.where('date').equals(date).toArray();
+    
+    // 1. Get customers for this route and SORT by ID to keep order consistent
+    const customers = await db.customers
+        .where('route').equals(route)
+        .toArray();
+    
+    customers.sort((a, b) => a.id - b.id); // Ensures ID-based ordering
+
+    // 2. Filter attendance based on the sorted customer list
+    const activeDeliveries = [];
+    customers.forEach(cust => {
+        const record = attendance.find(a => a.custId === cust.id && a.status === 'delivered');
+        if (record) {
+            activeDeliveries.push({ cust, record });
+        }
+    });
+
+    if (activeDeliveries.length === 0) {
+        alert(`No deliveries for ${route} on ${date}`);
+        return;
+    }
+
+    let message = `🚚 *ROUTE: ${route.toUpperCase()}*\n📅 DATE: ${date}\n━━━━━━━━━━━━━━━━━━\n`;
+    
+    let totalSalads = 0, totalPremium = 0, totalAddons = 0;
+
+    activeDeliveries.forEach((item, index) => {
+        const { cust, record } = item;
+        const isPremium = cust.plan && cust.plan.toLowerCase().includes('premium');
+        const name = cust.nickname || cust.name;
+        
+        const typeLabel = isPremium ? " (PREMIUM)" : " (Reg)";
+        const addonLabel = record.addons > 0 ? ` +${record.addons} Addon` : "";
+        
+        if (isPremium) totalPremium++; else totalSalads++;
+        totalAddons += (record.addons || 0);
+        
+        message += `${index + 1}. *${name}*${typeLabel}${addonLabel}\n`;
+    });
+
+    message += `━━━━━━━━━━━━━━━━━━\n`;
+    message += `📊 Regular: ${totalSalads} | Prem: ${totalPremium}${totalAddons > 0 ? ` | Addons: ${totalAddons}` : ''}\n`;
+    message += `📦 *Total: ${activeDeliveries.length}*`;
+
+    document.getElementById('routeShareModal').classList.add('hidden');
+    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`, '_blank');
 }
 
 init();

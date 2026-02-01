@@ -983,13 +983,16 @@ async function showTab(tabName) {
     const daily = document.getElementById('dailyScreen');
     const invoices = document.getElementById('invoiceScreen');
     const addBtn = document.querySelector('button[onclick="showAddCustomer()"]');
-    const picker = document.getElementById('mainDatePicker'); // New ID for your date input
+    const picker = document.getElementById('mainDatePicker');
+    const routeShareButton = document.getElementById('routesharebutton'); // New ID for your date input
 
     if (tabName === 'invoices') {
         daily.classList.add('hidden');
         invoices.classList.remove('hidden');
         if(addBtn) addBtn.classList.add('hidden'); 
-        
+        if(routeShareButton) routeShareButton.classList.add('invisible');
+        if(routeShareButton) routeShareButton.classList.add('pointer-events-none')
+            
         // Hide the top date picker on invoice screen
         if(picker) picker.style.display = 'none';
         
@@ -998,7 +1001,8 @@ async function showTab(tabName) {
         daily.classList.remove('hidden');
         invoices.classList.add('hidden');
         if(addBtn) addBtn.classList.remove('hidden'); 
-        
+        if(routeShareButton) routeShareButton.classList.remove('invisible');
+        if(routeShareButton) routeShareButton.classList.remove('pointer-events-none')
         // Show the top date picker for daily screen
         if(picker) picker.style.display = 'block';
         

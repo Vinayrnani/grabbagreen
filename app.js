@@ -1407,48 +1407,41 @@ async function performSilentPush() {
         }
 
         const now = new Date();
-        const dateSuffix = now.toISOString().split('T')[0];
-        const dailyToken = `${token}_${dateSuffix}`;
+        const dateSuffix = now.toISOString().split('T')[0]; // e.g., "2026-02-02"
         const timestamp = now.toISOString();
 
-        // 1. Update the main LIVE sync document
+        // 1. Update the LIVE document (Always happens)
         await fs.collection('sync_groups').doc(token).set({
             lastUpdated: timestamp,
             deviceInfo: navigator.userAgent.substring(0, 20),
             data: allData
         }, { merge: true });
 
-        // 2. DAILY SNAPSHOT LOGIC
-        const dailyDocRef = fs.collection('sync_groups').doc(dailyToken);
-        const dailyDoc = await dailyDocRef.get();
+        // 2. DAILY SNAPSHOT LOGIC with LocalStorage Guard
+        const lastSnapshotDate = localStorage.getItem('last_snapshot_date');
 
-        if (!dailyDoc.exists) {
-            console.log(`Creating daily snapshot: ${dailyToken}`);
-            await dailyDocRef.set({
-                token: token,
-                isSnapshot: true,
-                snapshotDate: dateSuffix,
-                lastUpdated: timestamp,
-                data: allData
-            });
+        if (lastSnapshotDate !== dateSuffix) {
+            // Only now do we talk to the cloud to double-check/upload
+            const dailyToken = `${token}_${dateSuffix}`;
+            const dailyDocRef = fs.collection('sync_groups').doc(dailyToken);
+            const dailyDoc = await dailyDocRef.get();
 
-            // 3. RETENTION LOGIC (Run only once a day when a new snapshot is made)
-            const thirtyDaysAgo = new Date();
-            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-            const cutoffDate = thirtyDaysAgo.toISOString().split('T')[0];
+            if (!dailyDoc.exists) {
+                console.log(`Creating daily snapshot: ${dailyToken}`);
+                await dailyDocRef.set({
+                    token: token,
+                    isSnapshot: true,
+                    snapshotDate: dateSuffix,
+                    lastUpdated: timestamp,
+                    data: allData
+                });
 
-            const oldSnapshots = await fs.collection('sync_groups')
-                .where('token', '==', token)
-                .where('isSnapshot', '==', true)
-                .where('snapshotDate', '<', cutoffDate)
-                .get();
+                // Run Retention Logic (Deletes old backups)
+                await runRetentionLogic(token);
+            }
 
-            const batch = fs.batch(); // Use a batch for efficient deletion
-            oldSnapshots.forEach(doc => {
-                batch.delete(doc.ref);
-                console.log("Cleaning up old backup:", doc.id);
-            });
-            await batch.commit();
+            // Mark as done locally so we don't 'get()' again today
+            localStorage.setItem('last_snapshot_date', dateSuffix);
         }
 
         updateSyncLabel("Synced");
@@ -1456,6 +1449,26 @@ async function performSilentPush() {
         console.warn("Auto-sync failed:", e);
         updateSyncLabel("Waiting for Connection");
     }
+}
+
+// Clean up old snapshots (Moved to its own function for clarity)
+async function runRetentionLogic(token) {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const cutoffDate = thirtyDaysAgo.toISOString().split('T')[0];
+
+    const oldSnapshots = await fs.collection('sync_groups')
+        .where('token', '==', token)
+        .where('isSnapshot', '==', true)
+        .where('snapshotDate', '<', cutoffDate)
+        .get();
+
+    if (oldSnapshots.empty) return;
+
+    const batch = fs.batch();
+    oldSnapshots.forEach(doc => batch.delete(doc.ref));
+    await batch.commit();
+    console.log("Cleanup complete.");
 }
 
 

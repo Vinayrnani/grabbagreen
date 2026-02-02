@@ -107,7 +107,7 @@ async function renderList() {
     for (const cust of activeCustomers) {
         const todayEntry = attendanceMap.get(cust.id);
         const hasPendingAddon = cust.pendingAddonDate === viewDate;
-
+        
         let addonBadge = "";
         if (todayEntry && todayEntry.addons > 0) {
             addonBadge = `<span class="bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded ml-2 border border-blue-800">ADD-ON INCLUDED</span>`;
@@ -1731,13 +1731,11 @@ async function renderCalendar() {
     if (label) {
         label.innerText = new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(currentDisplayDate);
     }
-
     // 2. Fetch Data: Attendance + Holiday List from Settings
     const [attendanceRecords, holidayData] = await Promise.all([
         db.attendance.where('custId').equals(customerId).filter(r => r.date.startsWith(monthPrefix)).toArray(),
         db.settings.get('holidayList')
     ]);
-
     const dynamicHolidays = holidayData ? holidayData.value : [];
 
     // 3. Map Attendance for lookup
@@ -1745,7 +1743,6 @@ async function renderCalendar() {
     attendanceRecords.forEach(rec => {
         // 1. Extract day from date string 'YYYY-MM-DD'
         const day = parseInt(rec.date.split('-')[2]);
-
         // 2. Add-on Logic: Check if the 'addons' field exists and has content
         // This handles both arrays and simple truthy checks
         const hasAddon = Array.isArray(rec.addons)
@@ -1757,7 +1754,6 @@ async function renderCalendar() {
         if (rec.isVacation) {
             finalStatus = 'Skipped';
         }
-
         // 4. Map to object for the loop
         dayMap[day] = {
             status: finalStatus, // 'delivered' or 'skipped'
@@ -1769,7 +1765,7 @@ async function renderCalendar() {
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const firstDay = new Date(year, month, 1).getDay();
     const offset = firstDay === 0 ? 6 : firstDay - 1; // Monday start
-
+    
     for (let i = 0; i < offset; i++) grid.innerHTML += `<div></div>`;
 
     for (let day = 1; day <= daysInMonth; day++) {
@@ -1781,7 +1777,6 @@ async function renderCalendar() {
         const isToday = new Date().toDateString() === dateObj.toDateString();
         const isSunday = dayOfWeek === 0;
         const isHoliday = dynamicHolidays.includes(dateStr);
-
         // --- COLOR LOGIC ---
         let bgColor = "bg-white";
         let textColor = "text-gray-600";
@@ -1803,7 +1798,7 @@ async function renderCalendar() {
                 if (!isSunday && !isHoliday) bgColor = "bg-green-50";
                 dotsHtml += '<div class="w-1.5 h-1.5 bg-green-500 rounded-full"></div>';
                 textColor = "text-green-700 font-black";
-            } else if (data.status === 'Skipped') {
+            } else if (data.status.toLowerCase() === 'skipped') {
                 if (!isSunday && !isHoliday) bgColor = "bg-red-50";
                 dotsHtml += '<div class="w-1.5 h-1.5 bg-red-400 rounded-full"></div>';
                 textColor = "text-red-700 font-black";

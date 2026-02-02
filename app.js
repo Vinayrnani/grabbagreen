@@ -1078,7 +1078,7 @@ async function renderInvoices() {
         const dateObj = new Date(year, month - 1, d);
         if (dateObj.getDay() !== 0 && !dynamicHolidays.includes(dateStr)) workingDaysCount++;
     }
-    const threshold = workingDaysCount * 0.75;
+    const threshold = workingDaysCount * 0.8;
 
     container.innerHTML = '';
     let grandTotal = 0;
@@ -1155,7 +1155,7 @@ async function generateCustomerInvoice(custId, monthYear) {
     }
 
     const attendanceRate = (custData.length / workingDaysCount) * 100;
-    const isSubscriber = Math.round(attendanceRate) >= 75;
+    const isSubscriber = Math.round(attendanceRate) >= 80;
 
     // Package price 5000/26 if >= 70%, otherwise Retail (assume 250 or adjust as per your PRICES object)
     const unitPrice = isSubscriber

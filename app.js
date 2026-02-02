@@ -1850,4 +1850,48 @@ function changeMonth(step) {
     renderCalendar();
 }
 
+async function toggleAutoSync() {
+    const toggle = document.getElementById('autoSyncToggle'); // Your checkbox ID
+    const isChecked = toggle.checked;
+
+    // 1. Save the preference
+    localStorage.setItem('auto_sync_enabled', isChecked);
+
+    // 2. Lock/Unlock the token field
+    updateTokenFieldStatus();
+
+    // 3. If turned ON, trigger a sync immediately
+    if (isChecked) {
+        const token = localStorage.getItem('grabb_sync_token');
+        if (!token || token.trim() === "") {
+            alert("Please enter a Sync Token first!");
+            toggle.checked = false;
+            localStorage.setItem('auto_sync_enabled', false);
+            updateTokenFieldStatus();
+            return;
+        }
+        
+        updateSyncLabel("Syncing...");
+        await performSilentPush();
+    } else {
+        updateSyncLabel("Sync Disabled");
+    }
+}
+function updateTokenFieldStatus() {
+    const tokenInput = document.getElementById('syncToken');
+    const isEnabled = localStorage.getItem('auto_sync_enabled') === 'true';
+
+    if (isEnabled) {
+        tokenInput.readOnly = true;
+        // Optional: Add styling to show it's locked
+        tokenInput.classList.add('bg-gray-100', 'text-gray-500', 'cursor-not-allowed');
+    } else {
+        tokenInput.readOnly = false;
+        tokenInput.classList.remove('bg-gray-100', 'text-gray-500', 'cursor-not-allowed');
+    }
+}
+
+// Call this on page load
+document.addEventListener('DOMContentLoaded', updateTokenFieldStatus);
+
 init();

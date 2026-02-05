@@ -551,3 +551,30 @@ Syntax OK.
 
 ---
 
+
+---
+
+# 2026-02-05 01:55:00
+
+## Prompt: make the radio button selected darker, and in round not as square with rounded corners
+
+## Response: Updated route radio buttons to circular with darker selected state:
+
+**Changes:**
+- Shape: `rounded-full` with fixed `w-10 h-10` (perfect circles)
+- Selected color: `bg-blue-700` (darker blue)
+- Selected border: `border-blue-700`
+- Selected text: `text-white` (for contrast)
+- Unselected: gray border with gray text
+- Layout: Centered with gap-3 spacing
+
+**Visual:**
+```
+○  ○  ○    ← Unselected: gray border, gray text
+●  ○  ○    ← Selected: dark blue bg, white text
+```
+
+Syntax OK.
+
+---
+

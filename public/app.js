@@ -17,7 +17,7 @@ db.version(12).stores({ // Increment version to 12 - added extra addons field
     settings: 'id, value' // Added for Holiday List
 });
 
-const PRICES = { Regular: 5000, Premium: 6500, 'Couple': 8999, MealBox: 7800, WalkIn: 200, Addon: 100 };
+const PRICES = { Regular: 4999, Premium: 6499, 'Couple': 8999, MealBox: 7800, WalkIn: 200, Addon: 100 };
 
 // Helper to get plan abbreviation (1-2 letters)
 function getPlanAbbreviation(plan) {

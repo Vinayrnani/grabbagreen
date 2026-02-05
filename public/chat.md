@@ -132,3 +132,21 @@ Now scroll position is properly saved and restored when re-rendering the list.
 
 Syntax OK.
 
+
+---
+
+# 2026-02-05 00:35:00
+
+## Prompt: the daily walkin section should appear only in Attendance tab check the main branch
+
+## Response: Fixed! Moved walk-in section inside dailyScreen div:
+
+**Changes in index.html:**
+- Moved `<section id="walkinContainer">` from outside main element into `<div id="dailyScreen">`
+- Now walk-in section only appears when Attendance tab is active
+- Other tabs (Invoices, Calendar) won't show it since dailyScreen is hidden
+
+The show/hide logic for holidays in renderList continues to work within the Attendance tab.
+
+Syntax OK.
+

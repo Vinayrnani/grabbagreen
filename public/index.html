@@ -29,7 +29,7 @@
     </script>
 </head>
 
-<body class="bg-gray-100 font-sans select-none">
+<body class="bg-gray-100 font-sans select-none flex flex-col h-screen overflow-hidden">
 
 
 
@@ -156,36 +156,36 @@
     </div>
 
 
-    <main class="p-1 pb-32">
-        <div id="dailyScreen">
-            <section id="walkinContainer" class="bg-white rounded-3xl p-3 shadow-sm border border-gray-100 mb-2">
-                <div class="flex items-center justify-between mb-2 border-b border-gray-50 pb-1">
-                    <h2 class="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400">Daily Walk-In Sales</h2>
+    <section id="walkinContainer" class="bg-white rounded-3xl p-3 shadow-sm border border-gray-100 mb-2 mx-1">
+        <div class="flex items-center justify-between mb-2 border-b border-gray-50 pb-1">
+            <h2 class="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400">Daily Walk-In Sales</h2>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+            <div class="bg-[#f6f7f1] rounded-2xl p-2 flex flex-col items-center">
+                <span class="text-[9px] font-bold text-gray-500 mb-1 uppercase">Salads</span>
+                <div class="flex items-center gap-3">
+                    <button onclick="updateWalkIn('salad', -1)"
+                        class="w-7 h-7 rounded-full bg-white shadow-sm flex items-center justify-center font-bold text-gray-400">-</button>
+                    <span id="walkInSaladCount" class="text-lg font-black text-gray-800">0</span>
+                    <button onclick="updateWalkIn('salad', 1)"
+                        class="w-7 h-7 rounded-full bg-white shadow-sm flex items-center justify-center font-bold text-gray-400">+</button>
                 </div>
-                <div class="grid grid-cols-2 gap-3">
-                    <div class="bg-[#f6f7f1] rounded-2xl p-2 flex flex-col items-center">
-                        <span class="text-[9px] font-bold text-gray-500 mb-1 uppercase">Salads</span>
-                        <div class="flex items-center gap-3">
-                            <button onclick="updateWalkIn('salad', -1)"
-                                class="w-7 h-7 rounded-full bg-white shadow-sm flex items-center justify-center font-bold text-gray-400">-</button>
-                            <span id="walkInSaladCount" class="text-lg font-black text-gray-800">0</span>
-                            <button onclick="updateWalkIn('salad', 1)"
-                                class="w-7 h-7 rounded-full bg-white shadow-sm flex items-center justify-center font-bold text-gray-400">+</button>
-                        </div>
-                    </div>
-                    <div class="bg-[#f6f7f1] rounded-2xl p-2 flex flex-col items-center">
-                        <span class="text-[9px] font-bold text-gray-500 mb-1 uppercase">Add-Ons</span>
-                        <div class="flex items-center gap-3">
-                            <button onclick="updateWalkIn('addon', -1)"
-                                class="w-7 h-7 rounded-full bg-white shadow-sm flex items-center justify-center font-bold text-gray-400">-</button>
-                            <span id="walkInAddonCount" class="text-lg font-black text-gray-800">0</span>
-                            <button onclick="updateWalkIn('addon', 1)"
-                                class="w-7 h-7 rounded-full bg-white shadow-sm flex items-center justify-center font-bold text-gray-400">+</button>
-                        </div>
-                    </div>
+            </div>
+            <div class="bg-[#f6f7f1] rounded-2xl p-2 flex flex-col items-center">
+                <span class="text-[9px] font-bold text-gray-500 mb-1 uppercase">Add-Ons</span>
+                <div class="flex items-center gap-3">
+                    <button onclick="updateWalkIn('addon', -1)"
+                        class="w-7 h-7 rounded-full bg-white shadow-sm flex items-center justify-center font-bold text-gray-400">-</button>
+                    <span id="walkInAddonCount" class="text-lg font-black text-gray-800">0</span>
+                    <button onclick="updateWalkIn('addon', 1)"
+                        class="w-7 h-7 rounded-full bg-white shadow-sm flex items-center justify-center font-bold text-gray-400">+</button>
                 </div>
-            </section>
+            </div>
+        </div>
+    </section>
 
+    <main class="flex-1 overflow-y-auto p-1 pb-32">
+        <div id="dailyScreen">
             <div>
                 <h2 id="subtext" class="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 px-2 mb-3">
                     Subscribed

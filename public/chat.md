@@ -114,3 +114,21 @@ Syntax OK.
 
 Syntax OK.
 
+
+---
+
+# 2026-02-05 00:30:00
+
+## Prompt: the renderinglist is not saving the scroll position it is going up for every change
+
+## Response: Fixed! The scroll position saving was broken because after restructuring the layout earlier, the scroll is now happening inside the `<main>` element instead of the window.
+
+**Changes in app.js:**
+- Line 186-187: Changed from `window.scrollY` to `mainEl.scrollTop` (where mainEl is document.querySelector('main'))
+- Line 224-228: Updated holiday case to use `mainEl.scrollTo()` instead of `window.scrollTo()`
+- Line 486-490: Updated normal case to use `mainEl.scrollTo()` instead of `window.scrollTo()`
+
+Now scroll position is properly saved and restored when re-rendering the list.
+
+Syntax OK.
+

@@ -181,185 +181,97 @@ let selectedDate = localISOTime;
 // Utility to get YYYY-MM-DD
 //const getToday = () => new Date().toISOString().split('T')[0];
 
-async function renderList() {
-    // --- SCROLL FIX START ---
-    const scrollPos = window.scrollY;
-    // --- SCROLL FIX END ---
-
-    const list = document.getElementById('attendanceList');
-    list.innerHTML = '';
-
-    // 1. GET CURRENT CONTEXT
-    const viewDate = selectedDate || getToday();
-
-    // --- HOLIDAY & SUNDAY CHECK START ---
-    // Fetch dynamic holiday list from settings store
-    const holidayData = await db.settings.get('holidayList');
-    const dynamicHolidays = holidayData ? holidayData.value : [];
-
-    const dateObj = new Date(viewDate);
-    const isSunday = dateObj.getDay() === 0;
-    const isPublicHoliday = dynamicHolidays.includes(viewDate);
-
-    if (isSunday || isPublicHoliday) {
-        list.innerHTML = `
-            <div class="flex flex-col items-center justify-center h-[65vh] w-full text-center animate-fadeIn p-6">
-                <div class="text-7xl mb-6">🎉</div>
-                <h2 class="text-3xl font-black text-gray-800 uppercase tracking-tight leading-none">
-                    Yay! It's a <br> Holiday today
-                </h2>
-                <div class="w-12 h-1 bg-green-500 my-6 rounded-full"></div>
-                <p class="text-gray-500 font-bold uppercase text-xs tracking-[0.2em]">
-                    ${isPublicHoliday ? 'Festival / Public Holiday' : 'No deliveries on Sunday'}
-                </p>
-            </div>
-
-        `;
-        // Hide walk-in section on holidays
-        const walkinSection = document.getElementById('walkinContainer') || document.getElementById('walkins');
-        const subscriberText = document.getElementById('subtext');
-        if (subscriberText) subscriberText.style.display = 'none';
-        if (walkinSection) walkinSection.style.display = 'none';
-
-        window.scrollTo(0, scrollPos);
-        return; // Stop execution
-    } else {
-        // Show walk-in section on working days
-        const walkinSection = document.getElementById('walkinContainer') || document.getElementById('walkins');
-        const subscriberText = document.getElementById('subtext');
-        if (subscriberText) subscriberText.style.display = 'block';
-        if (walkinSection) walkinSection.style.display = 'block';
-    }
-    // --- HOLIDAY & SUNDAY CHECK END ---
-
-    let allCustomers = await db.customers.toArray();
-    const routes = [...new Set(allCustomers.map(c => c.route))].filter(Boolean);
-    const shareBar = document.getElementById('routeShareBar');
-
-
-    // Get all attendance for the date we are currently viewing
-    const dayAttendance = await db.attendance.where('date').equals(viewDate).toArray();
-    const attendanceMap = new Map(dayAttendance.map(a => [a.custId, a]));
-
-    // 2. SMART FILTERING
-    // Active List: Show if customer is 'active' OR if they have a record for this specific date
-    let activeCustomers = allCustomers.filter(c => {
-        const hasRecord = attendanceMap.has(c.id);
-        const isCurrentlyActive = c.status !== 'inactive';
-        return isCurrentlyActive || hasRecord;
-    });
-
-    // Inactive List: Show only if currently inactive AND no record exists for this date
-    const inactiveCustomers = allCustomers.filter(c => {
-        const hasRecord = attendanceMap.has(c.id);
-        const isCurrentlyInactive = c.status === 'inactive';
-        return isCurrentlyInactive && !hasRecord;
-    });
+// Helper function to generate a single card HTML
+function generateCardHTML(cust, todayEntry, attendanceMap, coupleAddonCounts, viewDate) {
+    const hasPendingAddon = cust.pendingAddonDate === viewDate;
     
-    // 2. Pre-calculate couple addon counts for the current month
-    const coupleAddonCounts = {};
-    for (const cust of [...activeCustomers, ...inactiveCustomers]) {
-        if (cust.plan === 'Couple') {
-            coupleAddonCounts[cust.id] = await getUsedCoupleAddonsCount(cust.id);
+    let addonBadge = "";
+    if (todayEntry && todayEntry.addons > 0) {
+        addonBadge = `<span class="bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded ml-2 border border-blue-800">ADD-ON INCLUDED</span>`;
+    } else if (!todayEntry && cust.pendingAddonDate === viewDate) {
+        addonBadge = `<span class="bg-yellow-400 text-black text-[10px] font-black px-2 py-0.5 rounded ml-2 animate-pulse border border-yellow-600">ADD-ON REQUESTED</span>`;
+    }
+
+    let statusConfig = {
+        cardClass: 'bg-white border-green-500 shadow-md',
+        badge: '',
+        hint: '',
+        isLocked: false
+    };
+
+    // Check for Vacation, Delivered, or Skipped status
+    if (todayEntry && todayEntry.isVacation) {
+        statusConfig = {
+            cardClass: 'bg-vacation-muted border-blue-400',
+            badge: '',
+            hint: `<p class="text-slate-500 text-xs mt-1 font-medium italic">Auto-skipped until ${cust.vacationUntil}</p>`,
+            isLocked: true,
+            statusIcon: `<div class="w-10 h-10 rounded-lg text-3xl flex items-center justify-center">🏖️</div>`,
+            actionButton: `<button onclick="resumeVacationEarly(${cust.id})" class="btn-resume text-[10px] px-3 py-2 rounded-lg font-bold shadow-md pointer-events-auto">RESUME EARLY</button>`
+        };
+    } else if (todayEntry) {
+        if (todayEntry.status === 'delivered') {
+            statusConfig = {
+                cardClass: 'bg-green-50 border-green-700 shadow-inner',
+                badge: '',
+                isLocked: true,
+                statusIcon: `<div class="h-10 rounded-lg bg-green-700 text-white flex items-center justify-center font-bold text-[10px] px-4 tracking-wide min-w-[85px]">DELIVERED</div>`
+            };
+        } else {
+            statusConfig = {
+                cardClass: 'bg-orange-50 border-orange-700 shadow-inner',
+                badge: '',
+                isLocked: true,
+                statusIcon: `<div class="h-10 rounded-lg bg-orange-700 text-white flex items-center justify-center font-bold text-[10px] px-4 tracking-wide min-w-[85px]">SKIPPED</div>`
+            };
         }
     }
 
-    // 3. RENDER ACTIVE/HISTORICAL CARDS
-    for (const cust of activeCustomers) {
-        const todayEntry = attendanceMap.get(cust.id);
-        const hasPendingAddon = cust.pendingAddonDate === viewDate;
-        
-        let addonBadge = "";
-        if (todayEntry && todayEntry.addons > 0) {
-            addonBadge = `<span class="bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded ml-2 border border-blue-800">ADD-ON INCLUDED</span>`;
-        } else if (!todayEntry && cust.pendingAddonDate === viewDate) {
-            addonBadge = `<span class="bg-yellow-400 text-black text-[10px] font-black px-2 py-0.5 rounded ml-2 animate-pulse border border-yellow-600">ADD-ON REQUESTED</span>`;
-        }
+    const planColors = {
+        'R': 'bg-slate-500',
+        'P': 'bg-amber-500',
+        'M': 'bg-sky-500',
+        'CP': 'bg-green-600'
+    };
+    const planColor = planColors[getPlanAbbreviation(cust.plan)] || 'bg-gray-500';
+    const isCouple = getPlanAbbreviation(cust.plan) === 'CP';
+    const isPremium = getPlanAbbreviation(cust.plan) === 'P';
+    
+    // Get inclusion: pending > todayEntry > default
+    let inclusion = pendingInclusions.get(cust.id);
+    if (!inclusion && todayEntry) {
+        inclusion = todayEntry.inclusion || getDefaultInclusion(cust.plan);
+    }
+    inclusion = inclusion || getDefaultInclusion(cust.plan);
+    
+    // Get addon for premium customers
+    let addon = pendingAddons.get(cust.id);
+    if (!addon && todayEntry) {
+        addon = todayEntry.addon || 'C';
+    }
+    addon = addon || 'C';
+    
+    // Get free addons for couple customers
+    let coupleAddon1 = pendingCoupleAddons.get(cust.id + '_1');
+    if (!coupleAddon1 && todayEntry) {
+        coupleAddon1 = todayEntry.coupleAddon1;
+    }
+    let coupleAddon2 = pendingCoupleAddons.get(cust.id + '_2');
+    if (!coupleAddon2 && todayEntry) {
+        coupleAddon2 = todayEntry.coupleAddon2;
+    }
 
-        let statusConfig = {
-            cardClass: 'bg-white border-green-500 shadow-md',
-            badge: '',
-            hint: '',
-            isLocked: false
-        };
+    // Get extra addons: pending > todayEntry > empty
+    let extraAddons = pendingExtraAddons.get(cust.id);
+    if (!extraAddons && todayEntry) {
+        extraAddons = todayEntry.extraAddons || [];
+    }
+    extraAddons = extraAddons || [];
 
-        // Check for Vacation, Delivered, or Skipped status
-        if (todayEntry && todayEntry.isVacation) {
-            statusConfig = {
-                cardClass: 'bg-vacation-muted border-blue-400',
-                badge: '',
-                hint: `<p class="text-slate-500 text-xs mt-1 font-medium italic">Auto-skipped until ${cust.vacationUntil}</p>`,
-                isLocked: true,
-                statusIcon: `<div class="w-10 h-10 rounded-lg text-3xl flex items-center justify-center">🏖️</div>`,
-                actionButton: `<button onclick="resumeVacationEarly(${cust.id})" class="btn-resume text-[10px] px-3 py-2 rounded-lg font-bold shadow-md pointer-events-auto">RESUME EARLY</button>`
-            };
-        } else if (todayEntry) {
-            if (todayEntry.status === 'delivered') {
-                statusConfig = {
-                    cardClass: 'bg-green-50 border-green-700 shadow-inner',
-                    badge: '',
-                    isLocked: true,
-                    statusIcon: `<div class="h-10 rounded-lg bg-green-700 text-white flex items-center justify-center font-bold text-[10px] px-4 tracking-wide min-w-[85px]">DELIVERED</div>`
-                };
-            } else {
-                statusConfig = {
-                    cardClass: 'bg-orange-50 border-orange-700 shadow-inner',
-                    badge: '',
-                    isLocked: true,
-                    statusIcon: `<div class="h-10 rounded-lg bg-orange-700 text-white flex items-center justify-center font-bold text-[10px] px-4 tracking-wide min-w-[85px]">SKIPPED</div>`
-                };
-            }
-        }
+    const isOnVacation = todayEntry && todayEntry.isVacation;
 
-        const card = document.createElement('div');
-        card.className = `customer-card p-4 rounded-xl border-l-8 flex justify-between items-center transition-all shadow-2xl h-[100px] ${statusConfig.cardClass}`;
-
-        setupLongPress(card, cust.id);
-
-        const planColors = {
-            'R': 'bg-slate-500',
-            'P': 'bg-amber-500',
-            'M': 'bg-sky-500',
-            'CP': 'bg-green-600'
-        };
-        const planColor = planColors[getPlanAbbreviation(cust.plan)] || 'bg-gray-500';
-        const isCouple = getPlanAbbreviation(cust.plan) === 'CP';
-        const isPremium = getPlanAbbreviation(cust.plan) === 'P';
-        
-        // Get inclusion: pending > todayEntry > default
-        let inclusion = pendingInclusions.get(cust.id);
-        if (!inclusion && todayEntry) {
-            inclusion = todayEntry.inclusion || getDefaultInclusion(cust.plan);
-        }
-        inclusion = inclusion || getDefaultInclusion(cust.plan);
-        
-        // Get addon for premium customers
-        let addon = pendingAddons.get(cust.id);
-        if (!addon && todayEntry) {
-            addon = todayEntry.addon || 'C';
-        }
-        addon = addon || 'C';
-        
-        // Get free addons for couple customers
-        let coupleAddon1 = pendingCoupleAddons.get(cust.id + '_1');
-        if (!coupleAddon1 && todayEntry) {
-            coupleAddon1 = todayEntry.coupleAddon1;
-        }
-        let coupleAddon2 = pendingCoupleAddons.get(cust.id + '_2');
-        if (!coupleAddon2 && todayEntry) {
-            coupleAddon2 = todayEntry.coupleAddon2;
-        }
-
-        // Get extra addons: pending > todayEntry > empty
-        let extraAddons = pendingExtraAddons.get(cust.id);
-        if (!extraAddons && todayEntry) {
-            extraAddons = todayEntry.extraAddons || [];
-        }
-        extraAddons = extraAddons || [];
-
-        const isOnVacation = todayEntry && todayEntry.isVacation;
-
-        card.innerHTML = `
+    return `
+        <div id="card-${cust.id}" class="customer-card p-4 rounded-xl border-l-8 flex justify-between items-center transition-all shadow-2xl h-[100px] ${statusConfig.cardClass}">
             <div class="flex-1 relative h-[90px]">
                 <div class="flex items-center gap-2 py-0.5">
                     <span class="bg-gray-800 text-white text-[10px] px-2 py-0.5 rounded font-bold">${cust.route}</span>
@@ -447,8 +359,188 @@ async function renderList() {
                 ${statusConfig.statusIcon || ''}
                 ${statusConfig.isLocked && statusConfig.actionButton ? statusConfig.actionButton : ''}
             </div>
-        `;
+        </div>
+    `;
+}
 
+// Smart update function - updates only a single card
+async function updateSingleCard(custId) {
+    const viewDate = selectedDate || getToday();
+    const list = document.getElementById('attendanceList');
+    
+    // Check if it's a holiday
+    const holidayData = await db.settings.get('holidayList');
+    const dynamicHolidays = holidayData ? holidayData.value : [];
+    const dateObj = new Date(viewDate);
+    const isSunday = dateObj.getDay() === 0;
+    const isPublicHoliday = dynamicHolidays.includes(viewDate);
+    
+    if (isSunday || isPublicHoliday) {
+        // On holidays, full re-render needed
+        return renderList();
+    }
+    
+    const cust = await db.customers.get(custId);
+    if (!cust) {
+        // Customer not found, do full re-render
+        return renderList();
+    }
+    
+    const todayEntry = await db.attendance.where({ custId: custId, date: viewDate }).first();
+    const dayAttendance = await db.attendance.where('date').equals(viewDate).toArray();
+    const attendanceMap = new Map(dayAttendance.map(a => [a.custId, a]));
+    
+    // Calculate couple addon counts
+    const coupleAddonCounts = {};
+    if (cust.plan === 'Couple') {
+        coupleAddonCounts[custId] = await getUsedCoupleAddonsCount(custId);
+    }
+    
+    // Check if customer should be in active or inactive section
+    const hasRecord = attendanceMap.has(custId);
+    const isActive = cust.status !== 'inactive' || hasRecord;
+    
+    // Find existing card
+    const existingCard = document.getElementById(`card-${custId}`);
+    
+    if (existingCard) {
+        // Update existing card
+        if (!isActive) {
+            // Card moved to inactive section, need full re-render
+            return renderList();
+        }
+        
+        // Generate new HTML and replace
+        const newHTML = generateCardHTML(cust, todayEntry, attendanceMap, coupleAddonCounts, viewDate);
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = newHTML;
+        const newCard = tempDiv.firstElementChild;
+        
+        // Copy event listeners setup
+        if (!todayEntry || (!todayEntry.isVacation && todayEntry.status !== 'delivered' && todayEntry.status !== 'skipped')) {
+            setupSwipe(newCard, cust);
+        }
+        setupLongPress(newCard, custId);
+        
+        // Replace old card with new
+        existingCard.replaceWith(newCard);
+    } else {
+        // Card doesn't exist, might be a new customer or status change
+        // Do full re-render
+        return renderList();
+    }
+}
+
+async function renderList() {
+    // --- SCROLL FIX START ---
+    const mainEl = document.querySelector('main');
+    const scrollPos = mainEl ? mainEl.scrollTop : window.scrollY;
+    // --- SCROLL FIX END ---
+
+    const list = document.getElementById('attendanceList');
+    list.innerHTML = '';
+
+    // 1. GET CURRENT CONTEXT
+    const viewDate = selectedDate || getToday();
+
+    // --- HOLIDAY & SUNDAY CHECK START ---
+    // Fetch dynamic holiday list from settings store
+    const holidayData = await db.settings.get('holidayList');
+    const dynamicHolidays = holidayData ? holidayData.value : [];
+
+    const dateObj = new Date(viewDate);
+    const isSunday = dateObj.getDay() === 0;
+    const isPublicHoliday = dynamicHolidays.includes(viewDate);
+
+    if (isSunday || isPublicHoliday) {
+        list.innerHTML = `
+            <div class="flex flex-col items-center justify-center h-[65vh] w-full text-center animate-fadeIn p-6">
+                <div class="text-7xl mb-6">🎉</div>
+                <h2 class="text-3xl font-black text-gray-800 uppercase tracking-tight leading-none">
+                    Yay! It's a <br> Holiday today
+                </h2>
+                <div class="w-12 h-1 bg-green-500 my-6 rounded-full"></div>
+                <p class="text-gray-500 font-bold uppercase text-xs tracking-[0.2em]">
+                    ${isPublicHoliday ? 'Festival / Public Holiday' : 'No deliveries on Sunday'}
+                </p>
+            </div>
+
+        `;
+        // Hide walk-in section on holidays
+        const walkinSection = document.getElementById('walkinContainer') || document.getElementById('walkins');
+        const subscriberText = document.getElementById('subtext');
+        if (subscriberText) subscriberText.style.display = 'none';
+        if (walkinSection) walkinSection.style.display = 'none';
+
+        // Restore scroll position smoothly
+        if (mainEl) {
+            mainEl.scrollTo({ top: scrollPos, behavior: 'auto' });
+        } else {
+            window.scrollTo({ top: scrollPos, behavior: 'auto' });
+        }
+        return; // Stop execution
+    } else {
+        // Show walk-in section on working days
+        const walkinSection = document.getElementById('walkinContainer') || document.getElementById('walkins');
+        const subscriberText = document.getElementById('subtext');
+        if (subscriberText) subscriberText.style.display = 'block';
+        if (walkinSection) walkinSection.style.display = 'block';
+    }
+    // --- HOLIDAY & SUNDAY CHECK END ---
+
+    let allCustomers = await db.customers.toArray();
+    const routes = [...new Set(allCustomers.map(c => c.route))].filter(Boolean);
+    const shareBar = document.getElementById('routeShareBar');
+
+
+    // Get all attendance for the date we are currently viewing
+    const dayAttendance = await db.attendance.where('date').equals(viewDate).toArray();
+    const attendanceMap = new Map(dayAttendance.map(a => [a.custId, a]));
+
+    // 2. SMART FILTERING
+    // Active List: Show if customer is 'active' OR if they have a record for this specific date
+    let activeCustomers = allCustomers.filter(c => {
+        const hasRecord = attendanceMap.has(c.id);
+        const isCurrentlyActive = c.status !== 'inactive';
+        return isCurrentlyActive || hasRecord;
+    });
+
+    // Inactive List: Show only if currently inactive AND no record exists for this date
+    const inactiveCustomers = allCustomers.filter(c => {
+        const hasRecord = attendanceMap.has(c.id);
+        const isCurrentlyInactive = c.status === 'inactive';
+        return isCurrentlyInactive && !hasRecord;
+    });
+    
+    // 2. Pre-calculate couple addon counts for the current month
+    const coupleAddonCounts = {};
+    for (const cust of [...activeCustomers, ...inactiveCustomers]) {
+        if (cust.plan === 'Couple') {
+            coupleAddonCounts[cust.id] = await getUsedCoupleAddonsCount(cust.id);
+        }
+    }
+
+    // 3. RENDER ACTIVE/HISTORICAL CARDS
+    for (const cust of activeCustomers) {
+        const todayEntry = attendanceMap.get(cust.id);
+        
+        // Generate card HTML using helper function
+        const cardHTML = generateCardHTML(cust, todayEntry, attendanceMap, coupleAddonCounts, viewDate);
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = cardHTML;
+        const card = tempDiv.firstElementChild;
+        
+        // Setup event handlers
+        setupLongPress(card, cust.id);
+        
+        // Check status for swipe setup
+        let statusConfig = { isLocked: false };
+        if (todayEntry && todayEntry.isVacation) {
+            statusConfig.isLocked = true;
+        } else if (todayEntry) {
+            statusConfig.isLocked = true;
+        }
+        
         if (!statusConfig.isLocked) {
             setupSwipe(card, cust);
         }
@@ -478,7 +570,12 @@ async function renderList() {
     }
 
     // --- SCROLL FIX END ---
-    window.scrollTo(0, scrollPos);
+    // Restore scroll position smoothly
+    if (mainEl) {
+        mainEl.scrollTo({ top: scrollPos, behavior: 'auto' });
+    } else {
+        window.scrollTo({ top: scrollPos, behavior: 'auto' });
+    }
 }
 
 
@@ -614,8 +711,7 @@ async function recordAttendance(custId, status) {
 
         lastAction = { type: 'attendance', id: id, custId: custId };
         showUndo(`Marked ${status} ${finalAddons ? 'with Add-on' : ''}`);
-
-        await renderList();
+        await updateSingleCard(custId);
 
     } catch (e) {
         console.error("Attendance Error:", e);
@@ -636,16 +732,23 @@ async function toggleStatus(custId, newStatus) {
         if (existingRecord.status === newStatus) {
             await db.attendance.delete(existingRecord.id);
             showUndo('Status cleared');
-            await renderList();
+            await updateSingleCard(custId);
             return;
         }
         // If different status, update the record
         await db.attendance.update(existingRecord.id, { status: newStatus });
         showUndo(`Changed to ${newStatus}`);
-        await renderList();
+        await updateSingleCard(custId);
     } else {
         // No existing record, create a new one
-        await recordAttendance(custId, newStatus);
+        await db.attendance.add({
+            custId: custId,
+            date: today,
+            status: newStatus,
+            quantity: 1
+        });
+        showUndo(`Marked ${newStatus}`);
+        await updateSingleCard(custId);
     }
 }
 
@@ -891,7 +994,7 @@ function toggleInclusion(custId) {
     const toggled = current === 'S2' ? 'S1' : 'S2';
     pendingInclusions.set(custId, toggled);
     localStorage.setItem(`incl_${custId}`, toggled);
-    renderList();
+    updateSingleCard(custId);
 }
 
 // Load pending inclusions from localStorage
@@ -932,7 +1035,7 @@ function selectAddon(addon) {
         const key = `coupleAddon${currentCoupleAddonSlot}_${currentCoupleAddonCustId}`;
         pendingCoupleAddons.set(currentCoupleAddonCustId + '_' + currentCoupleAddonSlot, addon);
         localStorage.setItem(key, addon);
-        renderList();
+        updateSingleCard(currentCoupleAddonCustId);
     } else if (currentExtraAddonCustId) {
         const arr = pendingExtraAddons.get(currentExtraAddonCustId) || [];
         if (arr.length < 5) {
@@ -940,11 +1043,11 @@ function selectAddon(addon) {
             pendingExtraAddons.set(currentExtraAddonCustId, arr);
             localStorage.setItem(`extraAddon_${currentExtraAddonCustId}_${arr.length - 1}`, addon);
         }
-        renderList();
+        updateSingleCard(currentExtraAddonCustId);
     } else if (currentAddonCustId) {
         pendingAddons.set(currentAddonCustId, addon);
         localStorage.setItem(`addon_${currentAddonCustId}`, addon);
-        renderList();
+        updateSingleCard(currentAddonCustId);
     }
     closeAddonModal();
 }
@@ -983,7 +1086,7 @@ function removeExtraAddon(custId, index) {
             localStorage.setItem(`extraAddon_${custId}_${i}`, arr[i]);
             localStorage.removeItem(`extraAddon_${custId}_${i + 1}`);
         }
-        renderList();
+        updateSingleCard(custId);
     }
 }
 
@@ -1445,6 +1548,7 @@ async function showTab(tabName) {
     const addBtn = document.querySelector('button[onclick="showAddCustomer()"]');
     const picker = document.getElementById('mainDatePicker');
     const routeShareButton = document.getElementById('routesharebutton');
+    const walkin = document.getElementById('walkinContainer');
 
     // 1. Hide all screens first for a clean slate
 
@@ -1455,6 +1559,10 @@ async function showTab(tabName) {
     if (addBtn) addBtn.classList.add('hidden');
     if (picker) picker.classList.add('hidden');
     if (routeShareButton) routeShareButton.classList.add('invisible', 'pointer-events-none');
+    if (walkin) {
+        walkin.classList.add('hidden');
+        walkin.style.display = 'none';
+    }
 
     // 2. Conditional visibility based on tabName
     if (tabName === 'invoices') {
@@ -1474,6 +1582,10 @@ async function showTab(tabName) {
         if (addBtn) addBtn.classList.remove('hidden');
         if (picker) picker.classList.remove('hidden');
         if (routeShareButton) routeShareButton.classList.remove('invisible', 'pointer-events-none');
+        if (walkin) {
+            walkin.classList.remove('hidden');
+            walkin.style.display = 'block';
+        }
         renderList();
     }
 

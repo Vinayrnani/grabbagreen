@@ -6,7 +6,7 @@ if the change requires other items to be changed get a confirmation
 keep updating the requirements.md file with key information.
 read the chat.md to get the context if you loose or doesnt have any historical context
 you MUST follow all these instructions for every prmompt
-UUU when you see this pattern on the prompt, which means you stopped the reading the instructions and updating the chat.md file
+UUU when you see this pattern on the prompt, which means you forgot reading the instructions and updating the chat.md file
 Always make sure there are no syntax errors
 Update the prompt in the chat.md first before you start thinking
 Do not change any files in the Original folder they are for the representation purpose to see the previous working version of the app

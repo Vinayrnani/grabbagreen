@@ -183,8 +183,7 @@ let selectedDate = localISOTime;
 
 async function renderList() {
     // --- SCROLL FIX START ---
-    const mainEl = document.querySelector('main');
-    const scrollPos = mainEl ? mainEl.scrollTop : window.scrollY;
+    const scrollPos = window.scrollY;
     // --- SCROLL FIX END ---
 
     const list = document.getElementById('attendanceList');
@@ -222,11 +221,7 @@ async function renderList() {
         if (subscriberText) subscriberText.style.display = 'none';
         if (walkinSection) walkinSection.style.display = 'none';
 
-        if (mainEl) {
-            mainEl.scrollTo(0, scrollPos);
-        } else {
-            window.scrollTo(0, scrollPos);
-        }
+        window.scrollTo(0, scrollPos);
         return; // Stop execution
     } else {
         // Show walk-in section on working days
@@ -483,11 +478,7 @@ async function renderList() {
     }
 
     // --- SCROLL FIX END ---
-    if (mainEl) {
-        mainEl.scrollTo(0, scrollPos);
-    } else {
-        window.scrollTo(0, scrollPos);
-    }
+    window.scrollTo(0, scrollPos);
 }
 
 

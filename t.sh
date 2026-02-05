@@ -1,1 +1,1 @@
-cd public && python3 -m http.server 8080
+cd public && python3 -m http.server 8080 &

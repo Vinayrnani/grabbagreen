@@ -339,7 +339,7 @@ function generateCardHTML(cust, todayEntry, attendanceMap, coupleAddonCounts, vi
                     ` : ''}
                     ${extraAddons.length > 0 ? `
                         ${extraAddons.map((ea, idx) => `
-                            <button ${!statusConfig.isLocked ? `onclick="removeExtraAddon(${cust.id}, ${idx})"` : ''} class="text-xs px-2 py-0.5 rounded font-bold bg-red-100 text-red-700 border border-red-300 ${statusConfig.isLocked ? 'opacity-50' : ''}">
+                            <button ${!statusConfig.isLocked ? `onclick="removeExtraAddon(${cust.id}, ${idx})"` : ''} class="text-xs px-2 py-0.5 rounded font-bold ${['C', 'F', 'SE', 'BE'].includes(ea) ? 'bg-red-100 text-red-700 border border-red-300' : 'bg-green-100 text-green-700 border border-green-300'} ${statusConfig.isLocked ? 'opacity-50' : ''}">
                                 ${ea}
                             </button>
                         `).join('')}
@@ -2235,7 +2235,8 @@ async function processRouteShare(route) {
 
     let message = `🚚 *ROUTE: ${route.toUpperCase()}*\n📅 DATE: ${date}\n━━━━━━━━━━━━━━━━━━\n`;
 
-    let totalSalads = 0, totalPremium = 0, totalAddons = 0;
+    let totalSalads = 0, totalPremium = 0, totalAddonCount = 0;
+    const allUniqueAddonCodes = new Set();
 
     activeDeliveries.forEach((item, index) => {
         const { cust, record } = item;
@@ -2243,17 +2244,47 @@ async function processRouteShare(route) {
         const name = cust.nickname || cust.name;
 
         const typeLabel = isPremium ? " (PREMIUM)" : " (Reg)";
-        const addonLabel = record.addons > 0 ? ` +${record.addons} Addon` : "";
+
+        // Collect all addon codes
+        const allAddonCodes = [];
+        if (record.addon) allAddonCodes.push(record.addon);
+        if (record.coupleAddon1) allAddonCodes.push(record.coupleAddon1);
+        if (record.coupleAddon2) allAddonCodes.push(record.coupleAddon2);
+        if (record.extraAddons && Array.isArray(record.extraAddons)) {
+            record.extraAddons.forEach(ea => allAddonCodes.push(ea));
+        }
+
+        // Count occurrences
+        const addonCounts = {};
+        allAddonCodes.forEach(code => {
+            addonCounts[code] = (addonCounts[code] || 0) + 1;
+            allUniqueAddonCodes.add(code);
+        });
+
+        // Format with multipliers
+        const formattedAddons = Object.entries(addonCounts).map(([code, count]) => {
+            return count > 1 ? `${count}${code}` : code;
+        });
+        const addonDisplay = formattedAddons.length > 0 ? ` [${formattedAddons.join(", ")}]` : "";
 
         if (isPremium) totalPremium++; else totalSalads++;
-        totalAddons += (record.addons || 0);
+        totalAddonCount += allAddonCodes.length;
 
-        message += `${index + 1}. *${name}*${typeLabel}${addonLabel}\n`;
+        message += `${index + 1}. *${name}*${typeLabel}${addonDisplay}\n`;
     });
 
     message += `━━━━━━━━━━━━━━━━━━\n`;
-    message += `📊 Regular: ${totalSalads} | Prem: ${totalPremium}${totalAddons > 0 ? ` | Addons: ${totalAddons}` : ''}\n`;
+    message += `📊 Regular: ${totalSalads} | Prem: ${totalPremium}${totalAddonCount > 0 ? ` | Addons: ${totalAddonCount}` : ''}\n`;
     message += `📦 *Total: ${activeDeliveries.length}*`;
+
+    // Add addon reference section
+    if (allUniqueAddonCodes.size > 0) {
+        message += `\n\n*Addons:*\n`;
+        allUniqueAddonCodes.forEach(code => {
+            const fullName = ADDON_OPTIONS[code] || code;
+            message += `${code} = ${fullName}\n`;
+        });
+    }
 
     document.getElementById('routeShareModal').classList.add('hidden');
     window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`, '_blank');

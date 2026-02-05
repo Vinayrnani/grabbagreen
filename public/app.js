@@ -282,7 +282,7 @@ function generateCardHTML(cust, todayEntry, attendanceMap, coupleAddonCounts, vi
                 ${!isOnVacation && !(todayEntry && todayEntry.status === 'skipped') ? `
                 <!-- Line 2: Inclusions & Addon -->
                 <div class="flex items-center gap-2 py-0.5">
-                    <span class="text-black text-sm font-bold">Inc:</span>
+                    <span class="text-black text-sm font-bold">INC:</span>
                     ${isCouple
                         ? `<button ${!statusConfig.isLocked ? `onclick="toggleInclusion(${cust.id})"` : ''} class="text-xs px-2 py-0.5 rounded font-bold active:scale-95 transition-transform ${inclusion === 'S2' ? 'bg-orange-400 text-white' : 'bg-blue-500 text-white'} ${statusConfig.isLocked ? 'opacity-50' : ''}">${inclusion}</button>`
                         : `<span class="bg-blue-500 text-white text-xs px-2 py-0.5 rounded font-bold">${inclusion}</span>`
@@ -1421,9 +1421,20 @@ async function openEditModal(custId) {
     document.getElementById('editFullName').value = cust.name || '';
     document.getElementById('editNickname').value = cust.nickname || '';
 
-    document.getElementById('editRoute').value = cust.route;
+    // Set radio button for route
+    const routeRadio = document.querySelector(`input[name="editRoute"][value="${cust.route}"]`);
+    if (routeRadio) routeRadio.checked = true;
+    
     document.getElementById('editPlan').value = cust.plan;
-    document.getElementById('editStatus').value = cust.status || 'active';
+    
+    // Set toggle state for account status
+    const statusToggle = document.getElementById('editStatusToggle');
+    const statusText = document.getElementById('editStatusText');
+    const isActive = (cust.status || 'active') === 'active';
+    statusToggle.checked = isActive;
+    statusText.textContent = isActive ? 'Active' : 'Inactive';
+    statusText.className = isActive ? 'text-sm font-bold text-green-600' : 'text-sm font-bold text-red-600';
+    
     document.getElementById('editDiscount').value = cust.discount || 0;
     document.getElementById('editmobile').value = cust.mobile || '';
 
@@ -1436,9 +1447,9 @@ async function saveCustomerEdit() {
     const update = {
         name: document.getElementById('editFullName').value,
         nickname: document.getElementById('editNickname').value,
-        route: document.getElementById('editRoute').value,
+        route: document.querySelector('input[name="editRoute"]:checked')?.value || 'A',
         plan: document.getElementById('editPlan').value,
-        status: document.getElementById('editStatus').value,
+        status: document.getElementById('editStatusToggle').checked ? 'active' : 'inactive',
         mobile: document.getElementById('editmobile').value,
         discount: parseFloat(document.getElementById('editDiscount').value) || 0
     };
@@ -2491,6 +2502,23 @@ function updateTokenFieldStatus() {
 }
 
 // Call this on page load
-document.addEventListener('DOMContentLoaded', updateTokenFieldStatus);
+document.addEventListener('DOMContentLoaded', () => {
+    updateTokenFieldStatus();
+    
+    // Setup account status toggle listener
+    const statusToggle = document.getElementById('editStatusToggle');
+    if (statusToggle) {
+        statusToggle.addEventListener('change', function() {
+            const statusText = document.getElementById('editStatusText');
+            if (this.checked) {
+                statusText.textContent = 'Active';
+                statusText.className = 'text-sm font-bold text-green-600';
+            } else {
+                statusText.textContent = 'Inactive';
+                statusText.className = 'text-sm font-bold text-red-600';
+            }
+        });
+    }
+});
 
 init();

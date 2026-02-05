@@ -348,12 +348,27 @@
 
                 <div class="grid grid-cols-2 gap-4">
                     <div>
-                        <label class="text-[10px] font-bold text-gray-400 uppercase">Delivery Route</label>
-                        <select id="editRoute" class="w-full border-b-2 border-gray-100 p-2 outline-none font-bold">
-                            <option value="A">ROUTE A</option>
-                            <option value="B">ROUTE B</option>
-                            <option value="C">ROUTE C</option>
-                        </select>
+                        <label class="text-[10px] font-bold text-gray-400 uppercase block mb-2">Delivery Route</label>
+                        <div class="flex gap-3 justify-center">
+                            <label class="cursor-pointer">
+                                <input type="radio" name="editRoute" value="A" class="hidden peer" checked>
+                                <div class="w-10 h-10 flex items-center justify-center rounded-full border-2 border-gray-300 peer-checked:border-blue-700 peer-checked:bg-blue-700 font-bold text-sm text-gray-500 peer-checked:text-white transition-all">
+                                    A
+                                </div>
+                            </label>
+                            <label class="cursor-pointer">
+                                <input type="radio" name="editRoute" value="B" class="hidden peer">
+                                <div class="w-10 h-10 flex items-center justify-center rounded-full border-2 border-gray-300 peer-checked:border-blue-700 peer-checked:bg-blue-700 font-bold text-sm text-gray-500 peer-checked:text-white transition-all">
+                                    B
+                                </div>
+                            </label>
+                            <label class="cursor-pointer">
+                                <input type="radio" name="editRoute" value="C" class="hidden peer">
+                                <div class="w-10 h-10 flex items-center justify-center rounded-full border-2 border-gray-300 peer-checked:border-blue-700 peer-checked:bg-blue-700 font-bold text-sm text-gray-500 peer-checked:text-white transition-all">
+                                    C
+                                </div>
+                            </label>
+                        </div>
                     </div>
                     <div>
                         <label class="text-[10px] font-bold text-gray-400 uppercase">Plan Type</label>
@@ -379,11 +394,16 @@
                             class="w-full border-b-2 border-gray-100 p-2 outline-none font-bold" placeholder="0">
                     </div>
                     <div>
-                        <label class="text-[10px] font-bold text-gray-400 uppercase">Account Status</label>
-                        <select id="editStatus" class="w-full border-b-2 border-gray-100 p-2 outline-none font-bold">
-                            <option value="active" class="text-green-600">ACTIVE</option>
-                            <option value="inactive" class="text-red-600">INACTIVE</option>
-                        </select>
+                        <div class="flex items-center justify-between">
+                            <span class="text-[10px] font-bold text-gray-400 uppercase">Account Status:</span>
+                            <div class="flex items-center gap-3">
+                                <span id="editStatusText" class="text-sm font-bold text-green-600">Active</span>
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" id="editStatusToggle" class="sr-only peer">
+                                    <div class="w-11 h-6 bg-red-500 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500"></div>
+                                </label>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

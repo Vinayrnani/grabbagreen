@@ -449,3 +449,105 @@ Syntax OK.
 
 ---
 
+
+---
+
+# 2026-02-05 01:35:00
+
+## Prompt: Extra addons not respecting the veg/nonveeg color coding as in the 2nd line
+
+## Response: Fixed extra addons color coding to match line 2:
+
+**Changed in generateCardHTML():**
+- Added same logic as line 2: `['C', 'F', 'SE', 'BE'].includes(ea)` 
+- Red styling for non-veg (C, F, SE, BE)
+- Green styling for veg items
+
+Now extra addons show correct veg/non-veg colors.
+
+Syntax OK.
+
+---
+
+# 2026-02-05 01:40:00
+
+## Prompt: Can you take at the share route logic and see to inclue addons and Extra addons together
+
+## Response: Updated processRouteShare() to show all addons:
+
+**Changes:**
+- Collects: `record.addon`, `record.coupleAddon1`, `record.coupleAddon2`, `record.extraAddons`
+- Counts duplicates: shows "2C" for two Chicken
+- Format: `[C, 2SE, P]` in delivery list
+- Added "Addons:" section at bottom with code meanings from ADDON_OPTIONS
+
+**Example:**
+```
+1. *John* (PREMIUM) [C, 2SE, P]
+2. *Mike* (PREMIUM) [2F]
+
+*Addons:*
+C = Grilled Chicken
+SE = Scrambled Eggs
+P = Grilled Paneer
+F = Grilled Fish
+```
+
+Syntax OK.
+
+---
+
+# 2026-02-05 01:45:00
+
+## Prompt: Can you make the Edit Profile modal to have radio buttons instead of dropdowns for route and account Status
+
+## Response: Converted Account Status to toggle switch:
+
+**HTML:**
+- iOS-style toggle switch (green=active, red=inactive)
+- Shows "Account Status:" label with status text
+- Text color changes immediately: Green (active) / Red (inactive)
+
+**JavaScript:**
+- `openEditModal()`: Sets toggle state based on customer status
+- `saveCustomerEdit()`: Gets status from toggle (checked=active)
+- Event listener: Updates text and color immediately on toggle
+
+**Visual:**
+```
+Account Status: Active [O|    ]  (green)
+Account Status: Inactive [    |O]  (red)
+```
+
+Syntax OK.
+
+---
+
+# 2026-02-05 01:50:00
+
+## Prompt: good , now Routes as radio button group having only A B C
+
+## Response: Converted Route dropdown to radio buttons:
+
+**HTML:**
+- Three radio buttons: A, B, C
+- Hidden inputs with styled labels
+- Selected: blue border + blue background
+- Unselected: gray border
+
+**JavaScript:**
+- `openEditModal()`: Checks radio matching customer's route
+- `saveCustomerEdit()`: Gets value from checked radio (defaults to 'A')
+
+**Visual:**
+```
+Delivery Route
+[  A  ] [  B  ] [  C  ]
+```
+
+One tap to select route!
+
+Syntax OK.
+
+---
+

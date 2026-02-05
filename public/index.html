@@ -89,13 +89,25 @@
                 class="flex items-center gap-3 w-full p-3 bg-gray-50 rounded-xl hover:bg-gray-100 font-bold text-gray-700">
                 <span>📥 Restore Data</span>
             </button>
-            <div class="p-4 space-y-3">
+            <div class="space-y-3">
                 <h3 class="text-[10px] font-black text-gray-400 uppercase tracking-widest px-2">App Configurations</h3>
                 <button onclick="openHolidayManager()"
-                    class="flex items-center gap-3 w-full p-3 bg-gray-50 rounded-xl hover:bg-gray-100 font-bold text-gray-700">
+                    class="flex items-center gap-3 w-full p-3 bg-gray-50 rounded-xl hover:bg-gray-100 font-bold text-gray-700 text-sm whitespace-nowrap">
                     <span>📅 Holiday List</span>
                 </button>
 
+                <div class="flex items-center justify-between w-full p-3 bg-gray-50 rounded-xl" style="display: flex !important; visibility: visible !important;">
+                    <span class="font-bold text-gray-700 text-xs whitespace-nowrap">Daily Addon Input</span>
+                    <label class="relative inline-flex items-center cursor-pointer" style="display: inline-flex !important; visibility: visible !important;">
+                        <input type="checkbox" id="enforceDailyAddonsToggle" class="sr-only peer" onchange="toggleEnforceDailyAddonsDisplay()" style="display: none;">
+                        <div class="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600" style="display: block !important; visibility: visible !important;"></div>
+                    </label>
+                </div>
+
+                <button onclick="openDailyAddonSelector(); toggleSettings();" id="changeDailyAddonsBtn"
+                    class="flex items-center gap-3 w-full p-3 bg-gray-50 rounded-xl hover:bg-gray-100 font-bold text-gray-700 text-sm whitespace-nowrap" style="display: flex !important; visibility: visible !important;">
+                    <span>🍱 Change Daily Addons</span>
+                </button>
 
             </div>
             <button onclick="hardRefreshApp()"

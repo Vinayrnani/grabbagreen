@@ -82,11 +82,24 @@ const ADDON_OPTIONS = {
 
 const FREE_ADDON_OPTIONS = ['C', 'F', 'SE', 'BE', 'T', 'P'];
 
-function renderAddonOptions(type) {
+async function renderAddonOptions(type) {
     const container = document.getElementById('addonOptions');
     container.innerHTML = '';
     
-    const options = type === 'free' ? FREE_ADDON_OPTIONS : Object.keys(ADDON_OPTIONS);
+    let options;
+    if (type === 'free') {
+        // Check if daily addons are selected
+        const todayAddons = getTodaySelectedAddons();
+        
+        if (todayAddons && todayAddons.length > 0) {
+            // Show the selected daily addons
+            options = todayAddons;
+        } else {
+            options = FREE_ADDON_OPTIONS;
+        }
+    } else {
+        options = Object.keys(ADDON_OPTIONS);
+    }
     
     // Update modal title based on type
     const title = type === 'free' ? 'Select Free Addon' : 'Select Addon';
@@ -839,6 +852,56 @@ async function generateInvoice(custId) {
 async function init() {
     loadPendingInclusions();
     loadPendingAddons();
+    
+    // Check if daily addon enforcement is enabled
+    const enforceSetting = localStorage.getItem('enforceDailyAddons');
+    const enforceDailyAddons = enforceSetting === 'true'; // Default to false (OFF)
+    
+    const today = getToday();
+    const dailyAddons = getTodaySelectedAddons();
+    
+    // Get yesterday's addons for fallback
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+    const yesterdayAddons = localStorage.getItem(`dailyAddons_${yesterdayStr}`);
+    
+    // Check if today is Sunday or holiday
+    const dateObj = new Date(today);
+    const isSunday = dateObj.getDay() === 0;
+    const holidayData = await db.settings.get('holidayList');
+    const dynamicHolidays = holidayData ? holidayData.value : [];
+    const isPublicHoliday = dynamicHolidays.includes(today);
+    const isHoliday = isSunday || isPublicHoliday;
+    
+    if (enforceDailyAddons && !isHoliday) {
+        // Enforcement ON and not a holiday - must select addons every day before proceeding
+        if (!dailyAddons || dailyAddons.length === 0) {
+            // Show daily addon selector before proceeding
+            openDailyAddonSelector();
+            return; // Stop init until addons are selected
+        } else {
+            // Store selected addons for the day
+            window.selectedDailyAddons = dailyAddons;
+        }
+    } else {
+        // Enforcement OFF or it's a holiday - use existing addons if available, otherwise yesterday's or all
+        if (dailyAddons && dailyAddons.length > 0) {
+            window.selectedDailyAddons = dailyAddons;
+        } else if (yesterdayAddons) {
+            // Fallback to yesterday's addons
+            const parsedYesterday = JSON.parse(yesterdayAddons);
+            window.selectedDailyAddons = parsedYesterday;
+            localStorage.setItem(`dailyAddons_${today}`, JSON.stringify(parsedYesterday));
+        } else {
+            // Fallback to random 3 addons
+            const shuffled = [...FREE_ADDON_OPTIONS].sort(() => 0.5 - Math.random());
+            const randomAddons = shuffled.slice(0, 3);
+            window.selectedDailyAddons = randomAddons;
+            localStorage.setItem(`dailyAddons_${today}`, JSON.stringify(randomAddons));
+        }
+    }
+    
     const count = await db.customers.count();
     if (count === 0) {
         await db.customers.bulkAdd([
@@ -1013,12 +1076,12 @@ function loadPendingInclusions() {
 let currentAddonCustId = null;
 let currentExtraAddonCustId = null;
 
-function openAddonModal(custId) {
+async function openAddonModal(custId) {
     currentAddonCustId = custId;
     currentExtraAddonCustId = null;
     currentCoupleAddonCustId = null;
     currentCoupleAddonSlot = null;
-    renderAddonOptions('free');
+    await renderAddonOptions('free');
     document.getElementById('addonModal').classList.remove('hidden');
 }
 
@@ -1056,23 +1119,23 @@ function selectAddon(addon) {
 let currentCoupleAddonCustId = null;
 let currentCoupleAddonSlot = null;
 
-function openCoupleAddonModal(custId, slot) {
+async function openCoupleAddonModal(custId, slot) {
     currentAddonCustId = null;
     currentExtraAddonCustId = null;
     currentCoupleAddonCustId = custId;
     currentCoupleAddonSlot = slot;
-    renderAddonOptions('free');
+    await renderAddonOptions('free');
     document.getElementById('addonModal').classList.remove('hidden');
 }
 
 // Extra addon selection
 
-function openExtraAddonModal(custId) {
+async function openExtraAddonModal(custId) {
     currentAddonCustId = null;
     currentCoupleAddonCustId = null;
     currentCoupleAddonSlot = null;
     currentExtraAddonCustId = custId;
-    renderAddonOptions('all');
+    await renderAddonOptions('all');
     document.getElementById('addonModal').classList.remove('hidden');
 }
 
@@ -1228,7 +1291,15 @@ function confirmDateAction(actionType) {
 }
 function toggleSettings() {
     const drawer = document.getElementById('settingsDrawer');
-    if (drawer) drawer.classList.toggle('hidden');
+    if (drawer) {
+        const isHidden = drawer.classList.contains('hidden');
+        drawer.classList.toggle('hidden');
+        
+        // Load toggle state when opening
+        if (isHidden) {
+            loadEnforceDailyAddonsToggle();
+        }
+    }
 
     // Safety check: only update if the element exists
     const versionEl = document.querySelector('.version-text');
@@ -2521,4 +2592,261 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-init();
+// Daily Addon Selection System
+let selectedDailyAddonTypes = [];
+
+// Wait for DOM to be fully loaded before initializing
+document.addEventListener('DOMContentLoaded', function() {
+    init();
+});
+
+async function openDailyAddonSelector() {
+    // Check if addons already selected for today
+    const today = getToday();
+    const existingAddons = getTodaySelectedAddons();
+    
+    // Get yesterday's addons for pre-selection if nothing selected today
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+    const yesterdayAddonsStr = localStorage.getItem(`dailyAddons_${yesterdayStr}`);
+    const yesterdayAddons = yesterdayAddonsStr ? JSON.parse(yesterdayAddonsStr) : null;
+    
+    if (existingAddons && existingAddons.length > 0) {
+        selectedDailyAddonTypes = [...existingAddons];
+    } else if (yesterdayAddons && yesterdayAddons.length > 0) {
+        // Pre-select yesterday's addons
+        selectedDailyAddonTypes = [...yesterdayAddons];
+    } else {
+        selectedDailyAddonTypes = [];
+    }
+    
+    const enforceSetting = localStorage.getItem('enforceDailyAddons');
+    const enforceDailyAddons = enforceSetting !== 'false';
+    
+    const modalHtml = `
+        <div id="dailyAddonSelector" class="fixed inset-0 z-[300] bg-white flex flex-col">
+            <div class="flex-1 flex flex-col items-center justify-center p-6">
+                <h2 class="text-2xl font-black text-gray-800 mb-2">Daily Addons Selection</h2>
+                <p class="text-gray-500 mb-2 text-center">${existingAddons && existingAddons.length > 0 ? 'Currently selected addons for today:' : 'Select addon types for today'}</p>
+                <p class="text-gray-400 text-xs mb-6 text-center">Cancel = yesterday's addons, if not available random 3</p>
+                
+                <div class="grid grid-cols-3 gap-4 w-full max-w-sm mb-8">
+                    ${FREE_ADDON_OPTIONS.map(addon => `
+                        <button onclick="toggleDailyAddonSelection('${addon}')" 
+                            id="daily-addon-${addon}"
+                            class="p-4 rounded-xl border-2 border-gray-200 font-bold text-lg transition-all ${selectedDailyAddonTypes.includes(addon) ? 'bg-blue-500 border-blue-500 text-white' : ''}">
+                            ${addon}
+                        </button>
+                    `).join('')}
+                </div>
+                
+                <div class="flex gap-3 w-full max-w-sm">
+                    <button onclick="cancelDailyAddonsSelection()" 
+                        class="flex-1 bg-gray-200 text-gray-700 py-4 rounded-xl font-bold text-lg transition-all hover:bg-gray-300">
+                        Cancel
+                    </button>
+                    <button id="confirmDailyAddonsBtn" onclick="saveDailyAddonsSelection()" 
+                        class="flex-1 ${selectedDailyAddonTypes.length > 0 ? 'bg-blue-600' : 'bg-gray-300'} text-white py-4 rounded-xl font-bold text-lg transition-all" 
+                        ${selectedDailyAddonTypes.length > 0 ? '' : 'disabled'}>
+                        ${existingAddons && existingAddons.length > 0 ? 'Update' : 'Confirm'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Remove existing modal if any
+    const existingModal = document.getElementById('dailyAddonSelector');
+    if (existingModal) existingModal.remove();
+    
+    // Add modal to body
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = modalHtml;
+    document.body.appendChild(tempDiv.firstElementChild);
+}
+
+function toggleDailyAddonSelection(addon) {
+    const btn = document.getElementById(`daily-addon-${addon}`);
+    const index = selectedDailyAddonTypes.indexOf(addon);
+    
+    if (index > -1) {
+        // Deselect
+        selectedDailyAddonTypes.splice(index, 1);
+        btn.classList.remove('bg-blue-500', 'border-blue-500', 'text-white');
+        btn.classList.add('border-gray-200');
+    } else {
+        // Select (allow any number, validation on confirm)
+        selectedDailyAddonTypes.push(addon);
+        btn.classList.add('bg-blue-500', 'border-blue-500', 'text-white');
+        btn.classList.remove('border-gray-200');
+    }
+    
+    // Update confirm button - enable if at least 1 addon selected
+    const confirmBtn = document.getElementById('confirmDailyAddonsBtn');
+    if (selectedDailyAddonTypes.length > 0) {
+        confirmBtn.disabled = false;
+        confirmBtn.classList.remove('bg-gray-300');
+        confirmBtn.classList.add('bg-blue-600');
+    } else {
+        confirmBtn.disabled = true;
+        confirmBtn.classList.add('bg-gray-300');
+        confirmBtn.classList.remove('bg-blue-600');
+    }
+}
+
+async function saveDailyAddonsSelection() {
+    // Validate: must have at least 1 addon
+    if (selectedDailyAddonTypes.length === 0) {
+        alert('Please select at least 1 addon type');
+        return;
+    }
+    
+    const today = getToday();
+    localStorage.setItem(`dailyAddons_${today}`, JSON.stringify(selectedDailyAddonTypes));
+    
+    window.selectedDailyAddons = selectedDailyAddonTypes;
+    
+    // Assign addons to premium customers immediately
+    await assignDailyAddonsToPremium();
+    
+    // Remove modal
+    const modal = document.getElementById('dailyAddonSelector');
+    if (modal) modal.remove();
+    
+    // Continue with init
+    await init();
+}
+
+async function cancelDailyAddonsSelection() {
+    const today = getToday();
+    const existingAddons = getTodaySelectedAddons();
+    
+    // Remove modal
+    const modal = document.getElementById('dailyAddonSelector');
+    if (modal) modal.remove();
+    
+    if (!existingAddons || existingAddons.length === 0) {
+        // No addons selected yet - try yesterday's first, then random
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().split('T')[0];
+        const yesterdayAddons = localStorage.getItem(`dailyAddons_${yesterdayStr}`);
+        
+        let fallbackAddons;
+        let message;
+        
+        if (yesterdayAddons) {
+            // Use yesterday's addons
+            fallbackAddons = JSON.parse(yesterdayAddons);
+            message = 'Yesterday\'s addons assigned: ' + fallbackAddons.join(', ');
+        } else {
+            // Fallback to random 3
+            const shuffled = [...FREE_ADDON_OPTIONS].sort(() => 0.5 - Math.random());
+            fallbackAddons = shuffled.slice(0, 3);
+            message = 'Random addons assigned: ' + fallbackAddons.join(', ');
+        }
+        
+        selectedDailyAddonTypes = fallbackAddons;
+        localStorage.setItem(`dailyAddons_${today}`, JSON.stringify(fallbackAddons));
+        window.selectedDailyAddons = fallbackAddons;
+        
+        // Assign addons to premium customers
+        await assignDailyAddonsToPremium();
+        
+        showUndo(message);
+    }
+    
+    // Continue with init
+    await init();
+}
+
+// Function to get today's selected addons
+function getTodaySelectedAddons() {
+    const today = getToday();
+    const stored = localStorage.getItem(`dailyAddons_${today}`);
+    return stored ? JSON.parse(stored) : null;
+}
+
+// Settings toggle for enforcement
+function toggleEnforceDailyAddons() {
+    const current = localStorage.getItem('enforceDailyAddons');
+    const newValue = current !== 'false'; // Default to true
+    localStorage.setItem('enforceDailyAddons', (!newValue).toString());
+    return !newValue;
+}
+
+// Assign addons to premium customers based on selected types
+async function assignDailyAddonsToPremium() {
+    const selectedAddons = window.selectedDailyAddons || getTodaySelectedAddons();
+    if (!selectedAddons || selectedAddons.length === 0) return;
+    
+    const today = getToday();
+    const customers = await db.customers.toArray();
+    const premiumCustomers = customers.filter(c => 
+        c.plan && c.plan.toLowerCase().includes('premium') && 
+        c.status !== 'inactive'
+    );
+    
+    // Assign addons round-robin based on number of selected addons
+    premiumCustomers.forEach((cust, index) => {
+        const addonIndex = index % selectedAddons.length;
+        const assignedAddon = selectedAddons[addonIndex];
+        pendingAddons.set(cust.id, assignedAddon);
+        localStorage.setItem(`addon_${cust.id}`, assignedAddon);
+    });
+}
+
+// Toggle display for enforce daily addons setting
+async function toggleEnforceDailyAddonsDisplay() {
+    const newValue = await toggleEnforceDailyAddons();
+    showUndo(newValue ? "Daily addon enforcement ON" : "Daily addon enforcement OFF");
+}
+
+// Load toggle state when settings opens
+function loadEnforceDailyAddonsToggle() {
+    const setting = localStorage.getItem('enforceDailyAddons');
+    const isEnabled = setting === 'true'; // Default to false (OFF)
+    const toggle = document.getElementById('enforceDailyAddonsToggle');
+    if (toggle) toggle.checked = isEnabled;
+}
+
+// Initialize toggle state on page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Small delay to ensure DOM is ready
+    setTimeout(() => {
+        loadEnforceDailyAddonsToggle();
+    }, 100);
+});
+
+// Debug: Verify settings drawer elements exist
+function verifySettingsElements() {
+    const toggle = document.getElementById('enforceDailyAddonsToggle');
+    const changeBtn = document.getElementById('changeDailyAddonsBtn');
+    const drawer = document.getElementById('settingsDrawer');
+    
+    console.log('=== Settings Debug ===');
+    console.log('Drawer exists:', !!drawer);
+    console.log('Toggle exists:', !!toggle);
+    console.log('Change button exists:', !!changeBtn);
+    
+    if (drawer) {
+        console.log('Drawer display:', drawer.style.display);
+        console.log('Drawer hidden class:', drawer.classList.contains('hidden'));
+    }
+    
+    if (toggle) {
+        console.log('Toggle display:', window.getComputedStyle(toggle).display);
+        console.log('Toggle visibility:', window.getComputedStyle(toggle).visibility);
+    }
+    
+    if (changeBtn) {
+        console.log('ChangeBtn display:', window.getComputedStyle(changeBtn).display);
+        console.log('ChangeBtn visibility:', window.getComputedStyle(changeBtn).visibility);
+    }
+}
+
+// Run verification after page load
+document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(verifySettingsElements, 1000);
+});

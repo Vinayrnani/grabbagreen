@@ -39,6 +39,22 @@ Syntax OK.
 
 ---
 
+# 2026-02-05 00:15:00
+
+## Prompt: the calendar is not showing the addon legend on the day, when there are extra addons were taken
+
+## Response: Fixed! Updated calendar logic to check correct field:
+
+Changed line 2215-2219 in app.js:
+- Before: `rec.addons` 
+- After: `rec.extraAddons`
+
+The calendar was checking the wrong field (`rec.addons`) instead of where extra addons are actually stored (`rec.extraAddons`). Now the blue addon dot appears correctly on days when customers have extra addons.
+
+Syntax OK.
+
+---
+
 # 2026-02-05 00:05:00
 
 ## Prompt: now the walking section in attendance is getting scrolled along with the cards, can you make that top walking section stating and letting the customer cards scrollable?
@@ -52,3 +68,28 @@ Changed line 61: `<section id="walkinContainer" class="bg-white rounded-3xl p-3 
 - Header has `z-50` and `sticky top-0`, walk-in has `z-40` and `sticky top-16` (header height)
 
 Syntax OK.
+---
+
+# 2026-02-05 00:20:00
+
+## Prompt: the addon selection model is very long can you compact the height and make the list scrollable?
+
+## Response: Fixed! Made addon modal compact and scrollable:
+
+**HTML (index.html:322):**
+- Changed `space-y-2` to `space-y-1` for tighter spacing
+- Added `max-h-[50vh] overflow-y-auto` to make list scrollable while keeping title/cancel fixed
+
+**JavaScript (app.js:99):**
+- Reduced padding from `p-3` to `p-2`
+- Changed `rounded-xl` to `rounded-lg`
+- Added `text-sm` for smaller text
+
+**Result:**
+- Modal is more compact
+- Addon list scrolls within 50vh height limit
+- Title and Cancel button stay fixed at top/bottom
+- Better mobile experience
+
+Syntax OK.
+

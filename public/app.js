@@ -96,7 +96,7 @@ function renderAddonOptions(type) {
         const name = ADDON_OPTIONS[addon];
         const emoji = getAddonEmoji(addon);
         const btn = document.createElement('button');
-        btn.className = 'w-full p-3 bg-gray-50 rounded-xl font-bold text-gray-800 active:bg-gray-100 text-left';
+        btn.className = 'w-full p-2 bg-gray-50 rounded-lg font-bold text-gray-800 active:bg-gray-100 text-left text-sm';
         btn.onclick = () => selectAddon(addon);
         btn.innerHTML = `${emoji} ${addon} - ${name}`;
         container.appendChild(btn);
@@ -2212,11 +2212,11 @@ async function renderCalendar() {
     attendanceRecords.forEach(rec => {
         // 1. Extract day from date string 'YYYY-MM-DD'
         const day = parseInt(rec.date.split('-')[2]);
-        // 2. Add-on Logic: Check if the 'addons' field exists and has content
+        // 2. Add-on Logic: Check if the 'extraAddons' field exists and has content
         // This handles both arrays and simple truthy checks
-        const hasAddon = Array.isArray(rec.addons)
-            ? rec.addons.length > 0
-            : !!rec.addons;
+        const hasAddon = Array.isArray(rec.extraAddons)
+            ? rec.extraAddons.length > 0
+            : !!rec.extraAddons;
 
         // 3. Status Logic: Priority to Vacation, then the saved status
         let finalStatus = rec.status;

@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .code-box {
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            border-radius: 4px;
+            font-size: 0.65rem;
+            cursor: pointer;
+        }
+        .bg-inc { background-color: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
+        .bg-none { background-color: #f3f4f6; color: #9ca3af; border: 1px solid #e5e7eb; border-style: dashed; }
+        .bg-add { background-color: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+        .bg-qty { background-color: #f8fafc; color: #475569; border: 1px solid #e2e8f0; font-size: 0.7rem; }
+    </style>
+</head>
+<body class="bg-gray-100 p-2">
+
+    <div class="max-w-md mx-auto space-y-1">
+
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden flex h-28">
+            <div class="w-[80%] p-2 flex flex-col justify-between">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center">
+                        <span class="text-gray-400 font-black mr-2 text-lg leading-none">A</span>
+                        <h3 class="font-bold text-gray-800 text-sm">Rahul Regular</h3>
+                    </div>
+                    <span class="text-[9px] font-bold bg-gray-100 text-gray-600 px-1 rounded border border-gray-200">R</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-[9px] uppercase text-gray-300 font-bold">Inc:</span>
+                    <div class="code-box bg-qty">S1</div>
+                </div>
+                <div class="flex items-center gap-1 min-h-[24px]">
+                    <span class="text-[9px] uppercase text-gray-300 font-bold">Add:</span>
+                </div>
+            </div>
+            <button class="w-[20%] bg-blue-600 text-white text-3xl font-light">+</button>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden flex h-28">
+            <div class="w-[80%] p-2 flex flex-col justify-between">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center">
+                        <span class="text-gray-400 font-black mr-2 text-lg leading-none">B</span>
+                        <h3 class="font-bold text-gray-800 text-sm">Sneha Premium</h3>
+                    </div>
+                    <span class="text-[9px] font-bold bg-amber-100 text-amber-800 px-1 rounded border border-amber-200">P</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-[9px] uppercase text-gray-300 font-bold">Inc:</span>
+                    <div class="code-box bg-qty">S1</div>
+                    <div class="code-box bg-inc">C</div>
+                </div>
+                <div class="flex items-center gap-1 min-h-[24px]">
+                    <span class="text-[9px] uppercase text-gray-300 font-bold">Add:</span>
+                    <div class="code-box bg-add">A</div>
+                </div>
+            </div>
+            <button class="w-[20%] bg-blue-600 text-white text-3xl font-light">+</button>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden flex h-28">
+            <div class="w-[80%] p-2 flex flex-col justify-between">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center">
+                        <span class="text-gray-400 font-black mr-2 text-lg leading-none">C</span>
+                        <h3 class="font-bold text-gray-800 text-sm truncate">Amit & Priya</h3>
+                    </div>
+                    <span class="text-[9px] font-bold bg-green-100 text-green-800 px-1 rounded border border-green-200">CP</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-[9px] uppercase text-gray-300 font-bold">Inc:</span>
+                    <div class="code-box bg-qty" onclick="this.innerText = this.innerText === 'S2' ? 'S1' : 'S2'">S2</div>
+                    <div class="code-box bg-none">N</div>
+                    <div class="code-box bg-none">N</div>
+                </div>
+                <div class="flex items-center gap-1 min-h-[24px]">
+                    <span class="text-[9px] uppercase text-gray-300 font-bold">Add:</span>
+                </div>
+            </div>
+            <button class="w-[20%] bg-blue-600 text-white text-3xl font-light">+</button>
+        </div>
+
+    </div>
+</body>
+</html>

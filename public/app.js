@@ -2091,21 +2091,30 @@ let syncInterval = null;
 function initAutoSync() {
     const toggle = document.getElementById('autoSyncToggle');
 
-    // 1. Check local storage, but DEFAULT to 'true' if it's the first time
+    // Check if syncToken exists
+    const savedToken = localStorage.getItem('grabb_sync_token');
     const savedPreference = localStorage.getItem('auto_sync_enabled');
-    const isAutoSyncOn = savedPreference === null ? true : savedPreference === 'true';
 
-    // 2. Set the UI state
+    // If no token exists, force auto-sync OFF
+    const isAutoSyncOn = (savedToken && savedToken.trim() !== '') 
+        ? (savedPreference === null ? true : savedPreference === 'true')
+        : false;
+
+    // Set the UI state
     toggle.checked = isAutoSyncOn;
-    localStorage.setItem('auto_sync_enabled', isAutoSyncOn); // Ensure it's stored
+    localStorage.setItem('auto_sync_enabled', isAutoSyncOn);
 
-    // 3. Start timer if enabled
+    // Update token field status
+    updateTokenFieldStatus();
+
+    // Start timer if enabled
     if (isAutoSyncOn) startTimer();
 
-    // 4. Update preference when user toggles
+    // Update preference when user toggles
     toggle.addEventListener('change', (e) => {
         const active = e.target.checked;
         localStorage.setItem('auto_sync_enabled', active);
+        updateTokenFieldStatus();
         if (active) startTimer(); else stopTimer();
     });
 }

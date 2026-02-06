@@ -1,1 +1,1 @@
-cd public && python3 -m http.server 8080 &
+cd /workspaces/grabbagreen/public && python3 -m http.server 8080 &

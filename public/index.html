@@ -17,6 +17,7 @@
     <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
     <script>
@@ -215,11 +216,30 @@
 
         <div id="invoiceScreen" class="hidden">
             <div class="bg-white rounded-3xl p-4 shadow-sm border border-gray-100 mb-4">
-                <h3 id="invoices" class="text-sm font-black italic mb-3 uppercase tracking-tighter">Billing Period</h3>
+                <div class="flex justify-between items-center mb-3">
+                    <h3 id="invoices" class="text-sm font-black italic uppercase tracking-tighter">Billing Period</h3>
+                    <button onclick="generateAllInvoicesForMonth()" class="bg-green-600 text-white px-4 py-2 rounded-xl text-xs font-bold">Generate All</button>
+                </div>
                 <input type="month" id="invoiceMonthPicker" onchange="renderInvoices()"
                     class="w-full p-4 bg-gray-50 rounded-2xl border-none font-bold text-gray-700">
             </div>
-            <div id="invoiceListContainer" class="space-y-3">
+            
+            <div class="flex gap-2 mb-4 overflow-x-auto">
+                <button onclick="filterInvoices('all')" class="filter-btn px-4 py-2 rounded-full text-xs font-bold bg-gray-800 text-white">All</button>
+                <button onclick="filterInvoices('draft')" class="filter-btn px-4 py-2 rounded-full text-xs font-bold bg-gray-100 text-gray-600">Draft</button>
+                <button onclick="filterInvoices('sent')" class="filter-btn px-4 py-2 rounded-full text-xs font-bold bg-gray-100 text-gray-600">Sent</button>
+                <button onclick="filterInvoices('partial')" class="filter-btn px-4 py-2 rounded-full text-xs font-bold bg-gray-100 text-gray-600">Partial</button>
+                <button onclick="filterInvoices('paid')" class="filter-btn px-4 py-2 rounded-full text-xs font-bold bg-gray-100 text-gray-600">Paid</button>
+            </div>
+            
+            <div id="invoiceListContainer" class="space-y-3 pb-24"></div>
+            
+            <div class="fixed bottom-20 left-4 right-4 bg-white rounded-2xl p-4 shadow-lg border border-gray-100">
+                <div class="flex justify-between text-xs font-bold">
+                    <span>Total: ₹<span id="totalInvoiced">0</span></span>
+                    <span>Collected: ₹<span id="totalCollected">0</span></span>
+                    <span>Pending: ₹<span id="totalPending">0</span></span>
+                </div>
             </div>
         </div>
         <div id="calendarScreen" class="tab-content hidden px-4">
@@ -484,6 +504,139 @@
             </div>
         </div>
     </div>
+
+    <!-- Invoice Detail Modal -->
+    <div id="invoiceDetailModal" class="fixed inset-0 z-[200] hidden flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/70 backdrop-blur-md" onclick="closeInvoiceDetailModal()"></div>
+        <div class="relative bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl overflow-y-auto max-h-[90vh]">
+            <div class="flex justify-between items-center mb-6">
+                <div>
+                    <h2 id="detailInvoiceNumber" class="text-xl font-black text-gray-800"></h2>
+                    <p id="detailInvoiceDate" class="text-xs text-gray-400 font-bold"></p>
+                </div>
+                <span id="detailInvoiceStatus" class="px-3 py-1 rounded-full text-xs font-bold"></span>
+            </div>
+            
+            <div class="bg-gray-50 rounded-2xl p-4 mb-6">
+                <h3 id="detailCustomerName" class="font-black text-gray-800"></h3>
+                <p id="detailCustomerPlan" class="text-xs text-gray-500 font-bold uppercase"></p>
+            </div>
+            
+            <div class="mb-6">
+                <div class="flex justify-between items-center mb-3">
+                    <h4 class="text-xs font-black uppercase text-gray-400 tracking-widest">Line Items</h4>
+                </div>
+                <div id="detailLineItems" class="space-y-2"></div>
+            </div>
+            
+            <div class="mb-6">
+                <div class="flex justify-between items-center mb-3">
+                    <h4 class="text-xs font-black uppercase text-gray-400 tracking-widest">Adjustments</h4>
+                    <button onclick="showAddAdjustmentModal()" class="text-xs font-bold text-green-600">+ Add</button>
+                </div>
+                <div id="detailAdjustments" class="space-y-2"></div>
+            </div>
+            
+            <div class="border-t border-gray-100 pt-4 mb-6">
+                <div class="flex justify-between text-sm mb-2">
+                    <span class="text-gray-600">Subtotal</span>
+                    <span id="detailSubtotal" class="font-bold"></span>
+                </div>
+                <div class="flex justify-between text-sm mb-2">
+                    <span class="text-gray-600">Discount</span>
+                    <span id="detailDiscount" class="font-bold text-red-600"></span>
+                </div>
+                <div class="flex justify-between text-lg font-black mt-3 pt-3 border-t border-gray-100">
+                    <span>Total</span>
+                    <span id="detailTotal" class="text-green-700"></span>
+                </div>
+                <div class="flex justify-between text-sm mt-2">
+                    <span class="text-gray-600">Balance Due</span>
+                    <span id="detailBalance" class="font-bold text-amber-600"></span>
+                </div>
+            </div>
+            
+            <div class="mb-6">
+                <div class="flex justify-between items-center mb-3">
+                    <h4 class="text-xs font-black uppercase text-gray-400 tracking-widest">Payments</h4>
+                    <button onclick="showRecordPaymentModal()" class="text-xs font-bold text-green-600">+ Record</button>
+                </div>
+                <div id="detailPayments" class="space-y-2"></div>
+            </div>
+            
+            <div class="flex gap-3">
+                <button id="markSentBtn" onclick="markCurrentInvoiceSent()" class="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl">Mark as Sent</button>
+                <button onclick="shareCurrentInvoice()" class="flex-1 py-3 bg-green-600 text-white font-bold rounded-xl">Share</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Adjustment Modal -->
+    <div id="addAdjustmentModal" class="fixed inset-0 z-[210] hidden flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/50" onclick="closeAddAdjustmentModal()"></div>
+        <div class="relative bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl">
+            <h3 class="text-lg font-black mb-4">Add Adjustment</h3>
+            <div class="space-y-4">
+                <div>
+                    <label class="text-xs font-bold text-gray-400 uppercase">Type</label>
+                    <div class="flex gap-3 mt-2">
+                        <label class="flex-1">
+                            <input type="radio" name="adjType" value="credit" class="hidden peer" checked>
+                            <div class="text-center py-2 rounded-xl bg-gray-100 peer-checked:bg-green-600 peer-checked:text-white font-bold text-sm">Credit</div>
+                        </label>
+                        <label class="flex-1">
+                            <input type="radio" name="adjType" value="charge" class="hidden peer">
+                            <div class="text-center py-2 rounded-xl bg-gray-100 peer-checked:bg-red-600 peer-checked:text-white font-bold text-sm">Charge</div>
+                        </label>
+                    </div>
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-400 uppercase">Description</label>
+                    <input type="text" id="adjDescription" class="w-full mt-2 p-3 bg-gray-50 rounded-xl border-none font-bold" placeholder="e.g., Late delivery credit">
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-400 uppercase">Amount</label>
+                    <input type="number" id="adjAmount" class="w-full mt-2 p-3 bg-gray-50 rounded-xl border-none font-bold" placeholder="0">
+                </div>
+                <button onclick="saveAdjustment()" class="w-full py-3 bg-gray-900 text-white font-bold rounded-xl">Add Adjustment</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Record Payment Modal -->
+    <div id="recordPaymentModal" class="fixed inset-0 z-[210] hidden flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/50" onclick="closeRecordPaymentModal()"></div>
+        <div class="relative bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl">
+            <h3 class="text-lg font-black mb-4">Record Payment</h3>
+            <div class="space-y-4">
+                <div>
+                    <label class="text-xs font-bold text-gray-400 uppercase">Amount</label>
+                    <input type="number" id="paymentAmount" class="w-full mt-2 p-3 bg-gray-50 rounded-xl border-none font-bold">
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-400 uppercase">Date</label>
+                    <input type="date" id="paymentDate" class="w-full mt-2 p-3 bg-gray-50 rounded-xl border-none font-bold">
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-400 uppercase">Method</label>
+                    <select id="paymentMethod" class="w-full mt-2 p-3 bg-gray-50 rounded-xl border-none font-bold">
+                        <option value="Cash">Cash</option>
+                        <option value="UPI">UPI</option>
+                        <option value="Google Pay">Google Pay</option>
+                        <option value="PhonePe">PhonePe</option>
+                        <option value="Bank Transfer">Bank Transfer</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-gray-400 uppercase">Notes</label>
+                    <input type="text" id="paymentNotes" class="w-full mt-2 p-3 bg-gray-50 rounded-xl border-none font-bold" placeholder="Optional">
+                </div>
+                <button onclick="savePayment()" class="w-full py-3 bg-green-600 text-white font-bold rounded-xl">Record Payment</button>
+            </div>
+        </div>
+    </div>
+
     <footer class="fixed bottom-0 w-full bg-white border-t flex justify-around p-3 text-gray-600">
         <button onclick="showTab('attendance')" class="flex flex-col items-center text-green-600">
             <span>📝</span><span class="text-xs">Attendance</span>
@@ -498,7 +651,9 @@
 
     </footer>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="app.js"></script>
+    <script src="invoice.js"></script>
 </body>
 
 </html>

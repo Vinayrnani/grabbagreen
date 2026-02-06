@@ -10,11 +10,15 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
 
 const db = new Dexie("SaladDB");
 // Around line 14 in app.js
-db.version(12).stores({ // Increment version to 12 - added extra addons field
+db.version(13).stores({ // Increment version to 13 - added invoice system
     customers: '++id, name, nickname, route, plan, status, vacationUntil, pendingAddonDate, mobile, discount',
     attendance: '++id, [custId+date], date, status, addons, isWalkIn, quantity, isVacation, inclusion, addon, coupleAddon1, coupleAddon2, extraAddons',
     logs: '++id, timestamp, action',
-    settings: 'id, value' // Added for Holiday List
+    settings: 'id, value', // Added for Holiday List
+    invoices: '++id, custId, monthYear, invoiceNumber, status, subTotal, discountAmount, adjustmentsTotal, total, balanceDue, generatedAt, sentAt, [custId+monthYear]',
+    invoiceItems: '++id, invoiceId, type, description, quantity, unitPrice, amount',
+    invoiceAdjustments: '++id, invoiceId, type, description, amount',
+    payments: '++id, invoiceId, amount, date, method, notes'
 });
 
 const PRICES = { Regular: 4999, Premium: 6499, 'Couple': 8999, MealBox: 7800, WalkIn: 200, Addon: 100 };

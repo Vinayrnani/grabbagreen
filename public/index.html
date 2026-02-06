@@ -34,11 +34,11 @@
 
 
     <header class="bg-white border-b border-gray-100 sticky top-0 z-50">
-        <div class="flex justify-center py-2 mb-1" style="background-color: #f6f7f1;">
+        <div class="flex justify-center" style="background-color: #f6f7f1;">
             <img src="logo.jpg" alt="Grabb A Green" class="h-14 w-auto object-contain">
         </div>
 
-        <div class="flex items-center justify-between px-4 pb-1">
+        <div class="flex items-center justify-between px-4">
 
             <button id="routesharebutton" onclick="openRouteShareSelector()"
                 class="no-transition w-10 h-10 flex items-center justify-center bg-white rounded-xl shadow-sm border border-gray-100 active:scale-90 transition-all">
@@ -194,12 +194,19 @@
                 </div>
             </div>
         </div>
+        <div class="flex justify-center gap-2 mt-2">
+            <button id="filterAll" onclick="setPackageFilter('all')" class="filter-pill px-3 py-1 rounded-full text-[10px] font-bold bg-gray-100 text-gray-600 transition-all">All 0/0</button>
+            <button id="filterRegular" onclick="setPackageFilter('Regular')" class="filter-pill px-3 py-1 rounded-full text-[10px] font-bold bg-gray-100 text-gray-600 transition-all">R 0/0</button>
+            <button id="filterPremium" onclick="setPackageFilter('Premium')" class="filter-pill px-3 py-1 rounded-full text-[10px] font-bold bg-gray-100 text-gray-600 transition-all">P 0/0</button>
+            <button id="filterCouple" onclick="setPackageFilter('Couple')" class="filter-pill px-3 py-1 rounded-full text-[10px] font-bold bg-gray-100 text-gray-600 transition-all">CP 0/0</button>
+            <button id="filterMealBox" onclick="setPackageFilter('MealBox')" class="filter-pill px-3 py-1 rounded-full text-[10px] font-bold bg-gray-100 text-gray-600 transition-all">M 0/0</button>
+        </div>
     </section>
 
     <main class="flex-1 overflow-y-auto p-1 pb-32">
         <div id="dailyScreen">
             <div>
-                <h2 id="subtext" class="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 px-2 mb-3">
+                <h2 id="subtext" class="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 px-2 mb-2">
                     Subscribed
                     Customers</h2>
                 <div id="attendanceList" class="space-y-2 pb-20"></div>

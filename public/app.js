@@ -66,6 +66,62 @@ const pendingCoupleAddons = new Map();
 // Track pending extra addons (up to 5)
 const pendingExtraAddons = new Map();
 
+// Package filter state - default to 'all' to show all customers
+let currentPackageFilter = 'all';
+
+// Set package filter and re-render
+function setPackageFilter(plan) {
+    // Toggle filter: if clicking same filter, go back to 'all'
+    if (currentPackageFilter === plan) {
+        currentPackageFilter = 'all';
+    } else {
+        currentPackageFilter = plan;
+    }
+    renderList();
+}
+
+// Update filter pills with counts
+function updateFilterPills(activeCustomers, attendanceMap) {
+    const plans = ['all', 'Regular', 'Premium', 'Couple', 'MealBox'];
+    const abbreviations = { all: 'All', Regular: 'R', Premium: 'P', Couple: 'CP', MealBox: 'M' };
+    const colors = {
+        all: 'bg-gray-800 text-white',
+        Regular: 'bg-emerald-500 text-white',
+        Premium: 'bg-amber-500 text-white',
+        Couple: 'bg-green-500 text-white',
+        MealBox: 'bg-sky-500 text-white'
+    };
+    
+    plans.forEach(plan => {
+        const btn = document.getElementById(`filter${plan.charAt(0).toUpperCase() + plan.slice(1)}`);
+        if (!btn) return;
+        
+        let total, marked;
+        if (plan === 'all') {
+            // Count all active customers
+            total = activeCustomers.length;
+            marked = activeCustomers.filter(c => attendanceMap.has(c.id)).length;
+        } else {
+            // Count active customers for this plan
+            const planCustomers = activeCustomers.filter(c => c.plan === plan);
+            total = planCustomers.length;
+            marked = planCustomers.filter(c => attendanceMap.has(c.id)).length;
+        }
+        
+        // Update text - add checkmark if all marked
+        const checkmark = (marked === total && total > 0) ? '✓ ' : '';
+        btn.textContent = `${checkmark}${abbreviations[plan]} ${marked}/${total}`;
+        
+        // Update styling - match card badge colors exactly
+        btn.className = 'filter-pill px-3 py-1 rounded-full text-[10px] font-bold transition-all';
+        if (currentPackageFilter === plan) {
+            btn.className += ` ${colors[plan]}`;
+        } else {
+            btn.className += ' bg-gray-100 text-gray-600';
+        }
+    });
+}
+
 // Default addon options
 const ADDON_OPTIONS = {
     'C': 'Grilled Chicken',
@@ -437,6 +493,15 @@ async function updateSingleCard(custId) {
         
         // Replace old card with new
         existingCard.replaceWith(newCard);
+        
+        // Update filter pills counts after marking
+        const allCustomers = await db.customers.toArray();
+        const activeCustomers = allCustomers.filter(c => {
+            const hasRecord = attendanceMap.has(c.id);
+            const isCurrentlyActive = c.status !== 'inactive';
+            return isCurrentlyActive || hasRecord;
+        });
+        updateFilterPills(activeCustomers, attendanceMap);
     } else {
         // Card doesn't exist, might be a new customer or status change
         // Do full re-render
@@ -518,7 +583,16 @@ async function renderList() {
         return isCurrentlyActive || hasRecord;
     });
 
+    // Update filter pills with counts (before applying package filter)
+    updateFilterPills(activeCustomers, attendanceMap);
+
+    // Apply package filter if set (and not 'all')
+    if (currentPackageFilter !== 'all') {
+        activeCustomers = activeCustomers.filter(c => c.plan === currentPackageFilter);
+    }
+
     // Inactive List: Show only if currently inactive AND no record exists for this date
+    // Note: Inactive customers not affected by package filter
     const inactiveCustomers = allCustomers.filter(c => {
         const hasRecord = attendanceMap.has(c.id);
         const isCurrentlyInactive = c.status === 'inactive';
@@ -561,8 +635,8 @@ async function renderList() {
         list.appendChild(card);
     }
 
-    // 4. RENDER INACTIVE "BASEMENT"
-    if (inactiveCustomers.length > 0) {
+    // 4. RENDER INACTIVE "BASEMENT" - Only show when not filtering
+    if (currentPackageFilter === 'all' && inactiveCustomers.length > 0) {
         const div = document.createElement('div');
         div.className = "py-8 text-center text-gray-400 text-[10px] font-bold uppercase tracking-[0.3em]";
         div.innerText = "— Inactive Customers —";

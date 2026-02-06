@@ -27,14 +27,14 @@ function formatINR(amount) {
 
 // Generate invoice number
 async function generateInvoiceNumber(monthYear) {
-    const year = monthYear.split('-')[0];
     const allInvoices = await db.invoices.toArray();
-    const yearInvoices = allInvoices.filter(inv => inv.invoiceNumber.startsWith(`INV-${year}`));
-    const maxNum = yearInvoices.reduce((max, inv) => {
+    const prefix = `INV-${monthYear}-`;
+    const monthInvoices = allInvoices.filter(inv => inv.invoiceNumber.startsWith(prefix));
+    const maxNum = monthInvoices.reduce((max, inv) => {
         const num = parseInt(inv.invoiceNumber.split('-')[2]);
         return num > max ? num : max;
     }, 0);
-    return `INV-${year}-${String(maxNum + 1).padStart(4, '0')}`;
+    return `${prefix}${String(maxNum + 1).padStart(4, '0')}`;
 }
 
 // Generate single invoice
@@ -189,6 +189,17 @@ async function generateAllInvoicesForMonth() {
     const picker = document.getElementById('invoiceMonthPicker');
     const monthYear = picker.value;
     
+    // Check if invoices already exist for this month
+    const existingInvoices = await db.invoices.where('monthYear').equals(monthYear).toArray();
+    const existingCount = existingInvoices.length;
+    
+    if (existingCount > 0) {
+        const confirm = window.confirm(`${existingCount} invoice(s) already exist for this month. Regenerate?`);
+        if (!confirm) return;
+        await deleteMonthInvoices(monthYear);
+    }
+    
+    // Generate fresh invoices
     const customers = await db.customers.where('status').notEqual('inactive').toArray();
     let generated = 0;
     
@@ -200,6 +211,18 @@ async function generateAllInvoicesForMonth() {
     alert(`Generated ${generated} invoices`);
     renderInvoices();
     return generated;
+}
+
+// Delete all invoices for a month (for regeneration)
+async function deleteMonthInvoices(monthYear) {
+    const monthInvoices = await db.invoices.where('monthYear').equals(monthYear).toArray();
+    
+    for (const invoice of monthInvoices) {
+        await db.payments.where('invoiceId').equals(invoice.id).delete();
+        await db.invoiceAdjustments.where('invoiceId').equals(invoice.id).delete();
+        await db.invoiceItems.where('invoiceId').equals(invoice.id).delete();
+        await db.invoices.delete(invoice.id);
+    }
 }
 
 // Initialize invoice month picker to last generated month
@@ -253,7 +276,7 @@ async function generateInvoicePDF(invoiceId) {
     doc.text("INVOICE", 150, 30);
     doc.setFontSize(10);
     doc.text(`#${invoice.invoiceNumber}`, 150, 38);
-    doc.text(`Date: ${new Date(invoice.generatedAt).toLocaleDateString()}`, 150, 43);
+    doc.text(`Date: ${new Date(invoice.generatedAt).toLocaleDateString('en-IN')}`, 150, 43);
     doc.text(`Billing: ${monthName} ${year}`, 150, 48);
     doc.text(`To,`, 15, 60);
     doc.setFontSize(14);
@@ -275,9 +298,9 @@ async function generateInvoicePDF(invoiceId) {
     // Adjustments after discount, before grand total
     adjustments.forEach(adj => {
         tableBody.push([
+            '',
+            '',
             `${adj.type === 'credit' ? 'Credit' : 'Charge'}: ${adj.description}`,
-            '',
-            '',
             `${adj.type === 'credit' ? '-' : '+'}Rs. ${formatINR(adj.amount)}`
         ]);
     });
@@ -307,15 +330,26 @@ async function generateInvoicePDF(invoiceId) {
             fontStyle: 'bold',
             overflow: 'linebreak'
         },
-        tableWidth: 170
+        tableWidth: 'auto'
     });
     
     const finalY = doc.lastAutoTable.finalY + 20;
     doc.addImage(qrDataUrl, 'PNG', 15, finalY, 25, 25);
     doc.setFontSize(10);
-    doc.text("Scan to pay via UPI", 45, finalY+5 );
-    doc.text("Or PhonePe: 9346379970", 45, finalY + 13);
-    doc.text(`Total Amount: Rs. ${formatINR(roundedTotal)}`, 45, finalY + 21);
+    doc.setTextColor(40, 40, 40);
+    doc.text("Scan to pay via UPI", 45, finalY + 2);
+    
+    // PhonePe text (not clickable)
+    doc.text("Or PhonePe: 9346379970", 45, finalY + 9);
+    
+    // Clickable Payment Link with underline
+    const paymentLink = `upi://pay?pa=9346379970@ibl&pn=GrabbAGreen&am=${roundedTotal}&tn=${invoice.invoiceNumber}&cu=INR`;
+    doc.setTextColor(0, 102, 204);
+    doc.textWithLink("Or Payment Link", 45, finalY + 16, { url: paymentLink });
+    
+    doc.setTextColor(40, 40, 40);
+    doc.setFontSize(16);
+    doc.text(`Total Amount: Rs. ${formatINR(roundedTotal)}`, 45, finalY + 24);
     
     const thankYouY = finalY + 40;
     doc.setFontSize(10);

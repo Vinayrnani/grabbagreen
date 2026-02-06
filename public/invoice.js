@@ -135,8 +135,8 @@ async function recalculateInvoiceTotals(invoiceId, cust) {
         subTotal,
         discountAmount,
         adjustmentsTotal,
-        total,
-        balanceDue,
+        total: Math.round(total),
+        balanceDue: Math.round(balanceDue),
         status
     });
 }
@@ -476,7 +476,8 @@ async function renderInvoices() {
     });
     
     document.getElementById('totalInvoiced').textContent = totalInvoiced.toLocaleString('en-IN');
-    document.getElementById('totalCollected').textContent = totalCollected.toLocaleString('en-IN');
+    document.getElementById('totalCollected').textContent = total
+    .toLocaleString('en-IN');
     document.getElementById('totalPending').textContent = totalPending.toLocaleString('en-IN');
     
     container.innerHTML = '';

@@ -151,7 +151,7 @@
             <div class="flex items-center justify-between bg-[#f6f7f1] p-3 rounded-2xl mb-3">
                 <div class="flex flex-col">
                     <span class="text-[10px] font-black uppercase text-gray-800">Auto-Sync</span>
-                    <span id="syncStatusLabel" class="text-[8px] font-bold text-gray-400 uppercase">Status: Idle</span>
+                    <span id="syncStatusLabel" class="text-[8px] font-bold text-gray-400 uppercase">⚪ Status: Disabled</span>
                 </div>
                 <label class="relative inline-flex items-center cursor-pointer">
                     <input type="checkbox" id="autoSyncToggle" onchange="toggleAutoSync()" class="sr-only peer">
@@ -631,7 +631,7 @@
                         <option value="Cash">Cash</option>
                         <option value="UPI">UPI</option>
                         <option value="Google Pay">Google Pay</option>
-                        <option value="PhonePe">PhonePe</option>
+                        <option selected value="PhonePe">PhonePe</option>
                         <option value="Bank Transfer">Bank Transfer</option>
                         <option value="Other">Other</option>
                     </select>
@@ -661,6 +661,7 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="app.js"></script>
+    <script src="calendar.js"></script>
     <script src="invoice.js"></script>
 </body>
 

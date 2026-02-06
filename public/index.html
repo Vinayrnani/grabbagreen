@@ -212,27 +212,32 @@
             </div>
         </div>
 
-        <div id="invoiceScreen" class="hidden">
-            <div class="bg-white rounded-3xl p-4 shadow-sm border border-gray-100 mb-4">
-                <div class="flex justify-between items-center mb-3">
-                    <h3 id="invoices" class="text-sm font-black italic uppercase tracking-tighter">Billing Period</h3>
-                    <button onclick="generateAllInvoicesForMonth()" class="bg-green-600 text-white px-4 py-2 rounded-xl text-xs font-bold">Generate Invoices</button>
+        <div id="invoiceScreen" class="hidden flex flex-col h-full">
+            <!-- Sticky Header -->
+            <div class="sticky top-0 z-30 bg-[#f6fafc] pt-2">
+                <div class="bg-white rounded-3xl p-4 shadow-sm border border-gray-100 mb-4">
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 id="invoices" class="text-sm font-black italic uppercase tracking-tighter">Billing Period</h3>
+                        <button onclick="generateAllInvoicesForMonth()" class="bg-green-600 text-white px-4 py-2 rounded-xl text-xs font-bold">Generate Invoices</button>
+                    </div>
+                    <input type="month" id="invoiceMonthPicker" onchange="renderInvoices()"
+                        class="w-full p-4 bg-gray-50 rounded-2xl border-none font-bold text-gray-700">
                 </div>
-                <input type="month" id="invoiceMonthPicker" onchange="renderInvoices()"
-                    class="w-full p-4 bg-gray-50 rounded-2xl border-none font-bold text-gray-700">
+                
+                <div class="flex justify-center gap-2 mb-4 overflow-x-auto px-2">
+                    <button onclick="filterInvoices('all')" class="filter-btn px-4 py-2 rounded-full text-xs font-bold bg-gray-800 text-white">All</button>
+                    <button onclick="filterInvoices('draft')" class="filter-btn px-4 py-2 rounded-full text-xs font-bold bg-gray-100 text-gray-600">Draft</button>
+                    <button onclick="filterInvoices('sent')" class="filter-btn px-4 py-2 rounded-full text-xs font-bold bg-gray-100 text-gray-600">Sent</button>
+                    <button onclick="filterInvoices('partial')" class="filter-btn px-4 py-2 rounded-full text-xs font-bold bg-gray-100 text-gray-600">Partial</button>
+                    <button onclick="filterInvoices('paid')" class="filter-btn px-4 py-2 rounded-full text-xs font-bold bg-gray-100 text-gray-600">Paid</button>
+                </div>
             </div>
             
-            <div class="flex justify-center gap-2 mb-4 overflow-x-auto">
-                <button onclick="filterInvoices('all')" class="filter-btn px-4 py-2 rounded-full text-xs font-bold bg-gray-800 text-white">All</button>
-                <button onclick="filterInvoices('draft')" class="filter-btn px-4 py-2 rounded-full text-xs font-bold bg-gray-100 text-gray-600">Draft</button>
-                <button onclick="filterInvoices('sent')" class="filter-btn px-4 py-2 rounded-full text-xs font-bold bg-gray-100 text-gray-600">Sent</button>
-                <button onclick="filterInvoices('partial')" class="filter-btn px-4 py-2 rounded-full text-xs font-bold bg-gray-100 text-gray-600">Partial</button>
-                <button onclick="filterInvoices('paid')" class="filter-btn px-4 py-2 rounded-full text-xs font-bold bg-gray-100 text-gray-600">Paid</button>
-            </div>
+            <!-- Scrollable Content -->
+            <div id="invoiceListContainer" class="flex-1 overflow-y-auto space-y-3 px-2 pb-32"></div>
             
-            <div id="invoiceListContainer" class="space-y-3 pb-24"></div>
-            
-            <div class="fixed bottom-20 left-4 right-4 bg-white rounded-2xl p-4 shadow-lg border border-gray-100">
+            <!-- Fixed Footer -->
+            <div class="fixed bottom-20 left-4 right-4 bg-white rounded-2xl p-4 shadow-lg border border-gray-100 z-40">
                 <div class="flex justify-between text-xs font-bold">
                     <span>Total: ₹<span id="totalInvoiced">0</span></span>
                     <span>Collected: ₹<span id="totalCollected">0</span></span>

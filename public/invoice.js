@@ -20,6 +20,11 @@ const INVOICE_STATUS_COLORS = {
 let currentInvoiceFilter = 'all';
 let currentInvoiceId = null;
 
+// Indian Currency Format (1,23,456.00)
+function formatINR(amount) {
+    return amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 // Generate invoice number
 async function generateInvoiceNumber(monthYear) {
     const year = monthYear.split('-')[0];
@@ -182,7 +187,7 @@ async function markInvoiceSent(invoiceId) {
 // Generate all invoices for month
 async function generateAllInvoicesForMonth() {
     const picker = document.getElementById('invoiceMonthPicker');
-    const monthYear = picker.value || new Date().toISOString().slice(0, 7);
+    const monthYear = picker.value;
     
     const customers = await db.customers.where('status').notEqual('inactive').toArray();
     let generated = 0;
@@ -193,6 +198,24 @@ async function generateAllInvoicesForMonth() {
     }
     
     alert(`Generated ${generated} invoices`);
+    renderInvoices();
+    return generated;
+}
+
+// Initialize invoice month picker to last generated month
+async function initializeInvoiceMonthPicker() {
+    const picker = document.getElementById('invoiceMonthPicker');
+    if (!picker) return;
+    
+    // Get the most recent invoice
+    const allInvoices = await db.invoices.orderBy('generatedAt').reverse().limit(1).toArray();
+    
+    if (allInvoices.length > 0) {
+        picker.value = allInvoices[0].monthYear;
+    } else {
+        picker.value = new Date().toISOString().slice(0, 7);
+    }
+    
     renderInvoices();
 }
 
@@ -239,28 +262,30 @@ async function generateInvoicePDF(invoiceId) {
     const tableBody = items.map(item => [
         item.description,
         item.quantity,
-        `Rs. ${item.unitPrice}`,
-        `Rs. ${item.amount}`
+        `Rs. ${formatINR(item.unitPrice)}`,
+        `Rs. ${formatINR(item.amount)}`
     ]);
     
+    const roundedTotal = Math.round(invoice.total);
+    const roundOff = roundedTotal - invoice.total;
+    
+    tableBody.push(['', '', 'Subtotal', `Rs. ${formatINR(invoice.subTotal)}`]);
+    tableBody.push(['', '', `Discount (${cust.discount || 0}%)`, `-Rs. ${formatINR(invoice.discountAmount)}`]);
+    
+    // Adjustments after discount, before grand total
     adjustments.forEach(adj => {
         tableBody.push([
             `${adj.type === 'credit' ? 'Credit' : 'Charge'}: ${adj.description}`,
             '',
             '',
-            `${adj.type === 'credit' ? '-' : '+'}Rs. ${adj.amount}`
+            `${adj.type === 'credit' ? '-' : '+'}Rs. ${formatINR(adj.amount)}`
         ]);
     });
     
-    const roundedTotal = Math.round(invoice.total);
-    const roundOff = roundedTotal - invoice.total;
-    
-    tableBody.push(['', '', 'Subtotal', `Rs. ${invoice.subTotal}`]);
-    tableBody.push(['', '', `Discount (${cust.discount || 0}%)`, `-Rs. ${invoice.discountAmount}`]);
     if (roundOff !== 0) {
-        tableBody.push(['', '', 'Round Off', `Rs. ${roundOff.toFixed(2)}`]);
+        tableBody.push(['', '', 'Round Off', `Rs. ${formatINR(roundOff)}`]);
     }
-    tableBody.push(['', '', 'Grand Total', `Rs. ${roundedTotal}.00`]);
+    tableBody.push(['', '', 'Grand Total', `Rs. ${formatINR(roundedTotal)}`]);
     
     if (invoice.balanceDue <= 0 && roundedTotal > 0) {
         tableBody.push(['', '', 'PAID ✓', '']);
@@ -271,8 +296,18 @@ async function generateInvoicePDF(invoiceId) {
         head: [['Product', 'Qty', 'Price', 'Total']],
         body: tableBody,
         headStyles: { fillColor: [21, 128, 61], halign: 'center' },
+        columnStyles: { 
+            0: { halign: 'left' },   // Product
+            1: { halign: 'right' },  // Qty
+            2: { halign: 'right' },  // Price
+            3: { halign: 'right' }   // Total
+        },
         theme: 'grid',
-        styles: { fontStyle: 'bold' }
+        styles: { 
+            fontStyle: 'bold',
+            overflow: 'linebreak'
+        },
+        tableWidth: 170
     });
     
     const finalY = doc.lastAutoTable.finalY + 20;
@@ -280,7 +315,7 @@ async function generateInvoicePDF(invoiceId) {
     doc.setFontSize(10);
     doc.text("Scan to pay via UPI", 45, finalY+5 );
     doc.text("Or PhonePe: 9346379970", 45, finalY + 13);
-    doc.text(`Rs. ${roundedTotal}.00`, 45, finalY + 21);
+    doc.text(`Total Amount: Rs. ${formatINR(roundedTotal)}`, 45, finalY + 21);
     
     const thankYouY = finalY + 40;
     doc.setFontSize(10);
@@ -305,7 +340,7 @@ async function shareInvoiceViaWhatsApp(invoiceId) {
     const message = `Hi ${cust.nickname || cust.name},
 
 Your invoice #${invoice.invoiceNumber} for ${monthName} ${year}
-Total: ₹${Math.round(invoice.total)}
+Total: Rs. ${formatINR(Math.round(invoice.total))}
 
 💳 Pay here: upi://pay?pa=9346379970@ibl&pn=GrabbAGreen&am=${Math.round(invoice.total)}&tn=${invoice.invoiceNumber}&cu=INR
 
@@ -377,16 +412,16 @@ async function renderInvoices() {
             </div>
             <div class="flex justify-between items-center">
                 <p class="text-xs text-gray-500">
-                    Balance: ₹${inv.balanceDue}
+                    Balance: Rs. ${formatINR(inv.balanceDue)}
                 </p>
-                <p class="text-lg font-black text-green-700">₹${Math.round(inv.total).toLocaleString('en-IN')}</p>
+                <p class="text-lg font-black text-green-700">Rs. ${formatINR(Math.round(inv.total))}</p>
             </div>
         `;
         container.appendChild(card);
     });
     
     if (filteredInvoices.length === 0) {
-        container.innerHTML = '<p class="text-center text-gray-400 py-10">No invoices found. Click Generate All.</p>';
+        container.innerHTML = '<p class="text-center text-gray-400 py-10">No invoices found. Click Generate Invoices.</p>';
     }
 }
 
@@ -413,9 +448,9 @@ async function openInvoiceDetail(invoiceId) {
         div.innerHTML = `
             <div>
                 <p class="font-bold text-sm">${item.description}</p>
-                <p class="text-xs text-gray-400">${item.quantity} × ₹${item.unitPrice}</p>
+                <p class="text-xs text-gray-400">${item.quantity} × Rs. ${formatINR(item.unitPrice)}</p>
             </div>
-            <p class="font-bold">₹${item.amount}</p>
+            <p class="font-bold">Rs. ${formatINR(item.amount)}</p>
         `;
         itemsContainer.appendChild(div);
     });
@@ -432,16 +467,16 @@ async function openInvoiceDetail(invoiceId) {
                 </p>
             </div>
             <p class="font-bold ${adj.type === 'credit' ? 'text-green-600' : 'text-red-600'}">
-                ${adj.type === 'credit' ? '-' : '+'}₹${adj.amount}
+                ${adj.type === 'credit' ? '-' : '+'}Rs. ${formatINR(adj.amount)}
             </p>
         `;
         adjContainer.appendChild(div);
     });
     
-    document.getElementById('detailSubtotal').textContent = `₹${invoice.subTotal}`;
-    document.getElementById('detailDiscount').textContent = `-₹${invoice.discountAmount}`;
-    document.getElementById('detailTotal').textContent = `₹${invoice.total}`;
-    document.getElementById('detailBalance').textContent = `₹${invoice.balanceDue}`;
+    document.getElementById('detailSubtotal').textContent = `Rs. ${formatINR(invoice.subTotal)}`;
+    document.getElementById('detailDiscount').textContent = `-Rs. ${formatINR(invoice.discountAmount)}`;
+    document.getElementById('detailTotal').textContent = `Rs. ${formatINR(invoice.total)}`;
+    document.getElementById('detailBalance').textContent = `Rs. ${formatINR(invoice.balanceDue)}`;
     
     const paymentsContainer = document.getElementById('detailPayments');
     paymentsContainer.innerHTML = '';
@@ -450,7 +485,7 @@ async function openInvoiceDetail(invoiceId) {
         div.className = 'flex justify-between items-center py-2 border-b border-gray-100';
         div.innerHTML = `
             <div>
-                <p class="font-bold text-sm">₹${payment.amount} - ${payment.method}</p>
+                <p class="font-bold text-sm">Rs. ${formatINR(payment.amount)} - ${payment.method}</p>
                 <p class="text-xs text-gray-400">${payment.date}</p>
             </div>
         `;
@@ -470,6 +505,7 @@ async function openInvoiceDetail(invoiceId) {
 function closeInvoiceDetailModal() {
     document.getElementById('invoiceDetailModal').classList.add('hidden');
     currentInvoiceId = null;
+    renderInvoices();
 }
 
 function filterInvoices(status) {

@@ -192,3 +192,212 @@ The system manages daily attendance tracking with intelligent addon management b
 
 ## UI Reference
 See `Test.html.bkp` for card design template
+
+
+---
+
+
+## Invoice Management System
+
+### Overview
+Professional invoice generation with payment tracking, manual adjustments, and WhatsApp sharing with UPI payment links.
+
+---
+
+### Invoice Features
+
+#### 1. Invoice Generation
+- **Generate Invoices** - Creates invoices from attendance data for selected month
+- **Auto-calculation** - Line items (salads, addons), discounts, adjustments, totals
+- **Regeneration** - Confirms before replacing existing invoices (for attendance changes)
+- **Month Selector** - Defaults to last generated month
+
+#### 2. Invoice Numbering
+- Format: `INV-YYYYMM-0001`
+- Sequential numbering per month
+- Auto-increments within each month
+
+#### 3. Line Items
+- **Salad bowls** - Calculated from delivered attendance
+- **Extra addons** - Grouped by type with individual pricing
+- **Free addons excluded** - Only paid addons shown
+
+#### 4. Pricing
+| Addon | Price |
+|-------|-------|
+| C (Grilled Chicken) | ₹100 |
+| PR (Grilled Prawns) | ₹140 |
+| F (Grilled Fish) | ₹110 |
+| SE (Scrambled Eggs) | ₹50 |
+| BE (Boiled Eggs) | ₹40 |
+| P (Grilled Paneer) | ₹90 |
+| T (Grilled Tofu) | ₹90 |
+| A (Avocado) | ₹60 |
+| V (Mix Veggies) | ₹60 |
+| S (Extra Salad) | ₹200 |
+
+#### 5. Adjustments
+- **Credit** - Discounts, refunds, credits (shown in green, subtracts from total)
+- **Charge** - Late fees, delivery charges (shown in red, adds to total)
+- **Position** - After discount, before round off
+
+#### 6. Calculations
+- **Subtotal** - Sum of all line items
+- **Discount** - Customer's default discount percentage
+- **Round Off** - Auto-calculated to nearest rupee
+- **Grand Total** - Final amount (rounded)
+
+#### 7. Payment Tracking
+- **Status Types** - Draft, Sent, Partial, Paid
+- **Record Payments** - Amount, date, method, notes
+- **Methods** - Cash, UPI, Google Pay, PhonePe, Bank Transfer, Other
+- **Balance Due** - Auto-calculated from total - payments
+
+#### 8. PDF Generation
+- **Header** - Logo, invoice number, date, billing period, customer name
+- **Table** - Product, Qty, Price, Total (right-aligned numbers)
+- **Adjustments** - Credit/Charge with descriptions
+- **Payment Section** - QR code (scan to pay UPI), PhonePe number, Payment Link (clickable)
+- **Footer** - "Thank you" message
+
+#### 9. UPI Payment Link
+- Format: `upi://pay?pa=9346379970@ibl&pn=GrabbAGreen&am={amount}&tn={invoiceNumber}&cu=INR`
+- Clickable in PDF (underlined blue text)
+- Opens UPI app with pre-filled amount
+
+#### 10. WhatsApp Sharing
+- Native share API (mobile)
+- PDF + message with UPI link
+- Falls back to download if share cancelled
+
+---
+
+### Invoice Status Workflow
+```
+Draft → Mark as Sent → Sent
+              ↓
+         Record Payment
+              ↓
+         Partial/Paid
+```
+
+---
+
+### Database Schema (v13)
+
+```javascript
+invoices: '++id, custId, monthYear, invoiceNumber, status, subTotal, discountAmount, adjustmentsTotal, total, balanceDue, generatedAt, sentAt, [custId+monthYear]'
+
+invoiceItems: '++id, invoiceId, type, description, quantity, unitPrice, amount'
+
+invoiceAdjustments: '++id, invoiceId, type, description, amount'
+
+payments: '++id, invoiceId, amount, date, method, notes'
+```
+
+---
+
+### Implementation Status
+
+#### ✅ Completed Features
+1. **Invoice Generation** - From attendance data with auto-calculation
+2. **Regeneration** - Confirmation dialog before replacing
+3. **Invoice Numbering** - INV-YYYYMM-0001 format
+4. **Line Items** - Salads + grouped addons with individual prices
+5. **Adjustments** - Credits and charges with descriptions
+6. **Round Off** - Auto-calculated to nearest rupee
+7. **Payment Recording** - Full payment tracking with methods
+8. **Status Tracking** - Draft, Sent, Partial, Paid
+9. **PDF Generation** - Professional layout with logo
+10. **QR Code** - Scan to pay via UPI
+11. **Clickable Payment Link** - Underlined hyperlink in PDF
+12. **WhatsApp Sharing** - PDF + message with UPI link
+13. **Indian Currency** - Format: Rs. 12,34,567.00
+14. **Date Format** - DD/MM/YYYY
+
+---
+
+### Invoice UI Screens
+
+#### Invoice List
+```
+┌─────────────────────────────────────────┐
+│ 📅 January 2026              [Generate] │
+├─────────────────────────────────────────┤
+│ [All] [Draft] [Sent] [Paid]           │
+├─────────────────────────────────────────┤
+│ ┌─────────────────────────────────────┐ │
+│ │ 🟢 Amit Kumar          ₹3,200  [⋯] │ │
+│ │    INV-2026-001-0001  •  Paid ✓   │ │
+│ └─────────────────────────────────────┘ │
+│ ┌─────────────────────────────────────┐ │
+│ │ 🟡 Sneha Reddy         ₹4,150  [⋯] │ │
+│ │    INV-2026-001-0002  •  Balance 0 │ │
+│ └─────────────────────────────────────┘ │
+├─────────────────────────────────────────┤
+│ Total: ₹47,200  Collected: ₹32,000  Pending: ₹15,200 │
+└─────────────────────────────────────────┘
+```
+
+#### Invoice Detail Modal
+```
+┌─────────────────────────────────────────┐
+│ INV-2026-001-0001  [DRAFT]        [✕] │
+│ Jan 15, 2026                         │
+├─────────────────────────────────────────┤
+│ Amit Kumar                            │
+│ Premium                               │
+├─────────────────────────────────────────┤
+│ Line Items                             │
+│ Salad bowls (Premium)    12 × Rs. 208.00  Rs. 2,496.00 │
+│ Grilled Chicken (2)                   Rs.   200.00 │
+│ Grilled Prawns (1)                    Rs.   140.00 │
+├─────────────────────────────────────────┤
+│ Subtotal                              Rs. 2,836.00 │
+│ Discount (10%)                        -Rs.   283.60 │
+│ Round Off                             -Rs.     0.40 │
+│ Grand Total                           Rs. 2,552.00 │
+│ PAID ✓                                        │
+├─────────────────────────────────────────┤
+│ Payments                               │
+│ Jan 15 - UPI - Rs. 2,552.00            │
+├─────────────────────────────────────────┤
+│ [Mark as Sent]    [Share]              │
+└─────────────────────────────────────────┘
+```
+
+---
+
+### PDF Layout
+```
+┌─────────────────────────────────────────┐
+│          [LOGO]                       │
+│     Grabb A Green                     │
+│     9346379970, 9121448100           │
+├─────────────────────────────────────────┤
+│ INVOICE                          #INV-2026-001-0001        │
+│ Date: 15/01/2026                 Billing: January 2026    │
+│ To,                                                     │
+│ Amit Kumar                                               │
+├─────────────────────────────────────────┬────────────────┤
+│ Product              Qty    Price      Total             │
+├─────────────────────────────────────────┼────────────────┤
+│ Salad bowls (Premium) 12    Rs. 208    Rs. 2,496.00    │
+│ Grilled Chicken        2     Rs. 100    Rs.   200.00    │
+│ Grilled Prawns         1     Rs. 140    Rs.   140.00    │
+│ Subtotal                            Rs. 2,836.00        │
+│ Discount (10%)                      -Rs. 283.60         │
+│ Round Off                           -Rs.   0.40         │
+│ Grand Total                         Rs. 2,552.00        │
+│ PAID ✓                                             │
+├─────────────────────────────────────────┴────────────────┤
+│ [QR CODE]   Scan to pay via UPI                            │
+│           Or PhonePe: 9346379970                           │
+│           Or Payment Link (clickable, underlined)            │
+│           Total Amount: Rs. 2,552.00                        │
+├─────────────────────────────────────────┤
+│     Thank you for choosing us for your     │
+│           healthy journey!                  │
+│           Eat Green, Feel Great.            │
+└─────────────────────────────────────────┘
+```

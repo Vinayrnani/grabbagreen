@@ -38,7 +38,7 @@ async function generateInvoiceNumber(monthYear) {
 }
 
 // Generate single invoice
-async function generateInvoice(custId, monthYear) {
+async function generateInvoice(custId, monthYear, invoiceNumber = null) {
     const existing = await db.invoices.where({custId, monthYear}).first();
     if (existing) return existing.id;
     
@@ -48,11 +48,12 @@ async function generateInvoice(custId, monthYear) {
     
     if (records.length === 0) return null;
     
-    const invoiceNumber = await generateInvoiceNumber(monthYear);
+    // Use pre-generated invoice number, or generate new one
+    const number = invoiceNumber || await generateInvoiceNumber(monthYear);
     const invoiceId = await db.invoices.add({
         custId,
         monthYear,
-        invoiceNumber,
+        invoiceNumber: number,
         status: 'draft',
         subTotal: 0,
         discountAmount: 0,
@@ -201,10 +202,26 @@ async function generateAllInvoicesForMonth() {
     
     // Generate fresh invoices
     const customers = await db.customers.where('status').notEqual('inactive').toArray();
-    let generated = 0;
     
+    // Pre-generate all invoice numbers FIRST to ensure uniqueness
+    const prefix = `INV-${monthYear}-`;
+    const allInvoices = await db.invoices.toArray();
+    const monthInvoices = allInvoices.filter(inv => inv.invoiceNumber.startsWith(prefix));
+    const maxNum = monthInvoices.reduce((max, inv) => {
+        const num = parseInt(inv.invoiceNumber.split('-')[2]);
+        return num > max ? num : max;
+    }, 0);
+    
+    // Create array of invoice numbers for all customers
+    const invoiceNumbers = {};
+    for (let i = 0; i < customers.length; i++) {
+        invoiceNumbers[customers[i].id] = `${prefix}${String(maxNum + i + 1).padStart(4, '0')}`;
+    }
+    
+    // Now create invoices with pre-generated numbers
+    let generated = 0;
     for (const cust of customers) {
-        const invoiceId = await generateInvoice(cust.id, monthYear);
+        const invoiceId = await generateInvoice(cust.id, monthYear, invoiceNumbers[cust.id]);
         if (invoiceId) generated++;
     }
     
@@ -254,7 +271,19 @@ async function generateInvoicePDF(invoiceId) {
     const monthName = new Date(invoice.monthYear + '-01').toLocaleString('default', { month: 'long' });
     const year = invoice.monthYear.split('-')[0];
     
-    const upiLink = `upi://pay?pa=9346379970@ibl&pn=GrabbAGreen&am=${Math.round(invoice.total)}&tn=${invoice.invoiceNumber}&cu=INR`;
+    // Calculate in paise to avoid floating-point errors
+    const itemsTotalPaise = Math.round(invoice.subTotal * 100);
+    const discountPaise = Math.round(invoice.discountAmount * 100);
+    const adjustmentsPaise = adjustments.reduce((sum, adj) => {
+        return sum + (adj.type === 'credit' ? -adj.amount : adj.amount) * 100;
+    }, 0);
+    
+    const subtotalAfterPaise = itemsTotalPaise - discountPaise + adjustmentsPaise;
+    const roundedAmountPaise = Math.round(subtotalAfterPaise / 100) * 100;
+    const roundOffPaise = roundedAmountPaise - subtotalAfterPaise;
+    const roundedTotal = roundedAmountPaise / 100;
+    
+    const upiLink = `upi://pay?pa=9346379970@ibl&pn=GrabbAGreen&am=${Math.round(roundedTotal)}&tn=${invoice.invoiceNumber}&cu=INR`;
     const qrDiv = document.createElement('div');
     new QRCode(qrDiv, { text: upiLink, width: 80, height: 80 });
     const qrCanvas = qrDiv.querySelector('canvas');
@@ -289,13 +318,16 @@ async function generateInvoicePDF(invoiceId) {
         `Rs. ${formatINR(item.amount)}`
     ]);
     
-    const roundedTotal = Math.round(invoice.total);
-    const roundOff = roundedTotal - invoice.total;
+    // Table: Line Items Total → Discount → Adjustments → Sub Total → Round Off → Grand Total
     
-    tableBody.push(['', '', 'Subtotal', `Rs. ${formatINR(invoice.subTotal)}`]);
-    tableBody.push(['', '', `Discount (${cust.discount || 0}%)`, `-Rs. ${formatINR(invoice.discountAmount)}`]);
+    // Add Total (sum of line items)
+    const lineItemsTotal = items.reduce((sum, item) => sum + item.amount, 0);
+    tableBody.push(['', '', 'Total', `Rs. ${formatINR(lineItemsTotal)}`]);
     
-    // Adjustments after discount, before grand total
+    // Add discount
+    tableBody.push(['', '', 'Discount', `-Rs. ${formatINR(invoice.discountAmount)}`]);
+    
+    // Add adjustments
     adjustments.forEach(adj => {
         tableBody.push([
             '',
@@ -305,9 +337,17 @@ async function generateInvoicePDF(invoiceId) {
         ]);
     });
     
+    // Add subtotal after items, discount, adjustments
+    const subtotalAfter = subtotalAfterPaise / 100;
+    tableBody.push(['', '', 'Sub Total', `Rs. ${formatINR(subtotalAfter)}`]);
+    
+    // Add round off
+    const roundOff = (roundedAmountPaise - subtotalAfterPaise) / 100;
     if (roundOff !== 0) {
         tableBody.push(['', '', 'Round Off', `Rs. ${formatINR(roundOff)}`]);
     }
+    
+    // Grand Total
     tableBody.push(['', '', 'Grand Total', `Rs. ${formatINR(roundedTotal)}`]);
     
     if (invoice.balanceDue <= 0 && roundedTotal > 0) {
@@ -344,8 +384,10 @@ async function generateInvoicePDF(invoiceId) {
     
     // Clickable Payment Link with underline
     const paymentLink = `upi://pay?pa=9346379970@ibl&pn=GrabbAGreen&am=${roundedTotal}&tn=${invoice.invoiceNumber}&cu=INR`;
+    
+    doc.text(`Or Payment Link: `, 45, finalY + 16);
     doc.setTextColor(0, 102, 204);
-    doc.textWithLink("Or Payment Link", 45, finalY + 16, { url: paymentLink });
+    doc.textWithLink("Click Here to Pay Now", 75, finalY + 16, { url: paymentLink });
     
     doc.setTextColor(40, 40, 40);
     doc.setFontSize(16);
@@ -368,15 +410,27 @@ async function generateInvoicePDF(invoiceId) {
 async function shareInvoiceViaWhatsApp(invoiceId) {
     const invoice = await db.invoices.get(invoiceId);
     const cust = await db.customers.get(invoice.custId);
+    const items = await db.invoiceItems.where({invoiceId}).toArray();
+    const adjustments = await db.invoiceAdjustments.where({invoiceId}).toArray();
     const monthName = new Date(invoice.monthYear + '-01').toLocaleString('default', { month: 'long' });
     const year = invoice.monthYear.split('-')[0];
+    
+    // Calculate in paise to avoid floating-point errors (same as PDF)
+    const itemsTotalPaise = Math.round(invoice.subTotal * 100);
+    const discountPaise = Math.round(invoice.discountAmount * 100);
+    const adjustmentsPaise = adjustments.reduce((sum, adj) => {
+        return sum + (adj.type === 'credit' ? -adj.amount : adj.amount) * 100;
+    }, 0);
+    const subtotalAfterPaise = itemsTotalPaise - discountPaise + adjustmentsPaise;
+    const roundedAmountPaise = Math.round(subtotalAfterPaise / 100) * 100;
+    const roundedTotal = roundedAmountPaise / 100;
     
     const message = `Hi ${cust.nickname || cust.name},
 
 Your invoice #${invoice.invoiceNumber} for ${monthName} ${year}
-Total: Rs. ${formatINR(Math.round(invoice.total))}
+Total: Rs. ${formatINR(roundedTotal)}
 
-💳 Pay here: upi://pay?pa=9346379970@ibl&pn=GrabbAGreen&am=${Math.round(invoice.total)}&tn=${invoice.invoiceNumber}&cu=INR
+💳 Pay here: upi://pay?pa=9346379970@ibl&pn=GrabbAGreen&am=${Math.round(roundedTotal)}&tn=${invoice.invoiceNumber}&cu=INR
 
 PDF attached. Thank you!`;
     
@@ -507,10 +561,22 @@ async function openInvoiceDetail(invoiceId) {
         adjContainer.appendChild(div);
     });
     
-    document.getElementById('detailSubtotal').textContent = `Rs. ${formatINR(invoice.subTotal)}`;
+    // Calculate using paise method (same as PDF)
+    const itemsTotalPaise = Math.round(invoice.subTotal * 100);
+    const discountPaise = Math.round(invoice.discountAmount * 100);
+    const adjustmentsPaise = adjustments.reduce((sum, adj) => {
+        return sum + (adj.type === 'credit' ? -adj.amount : adj.amount) * 100;
+    }, 0);
+    const subtotalAfterPaise = itemsTotalPaise - discountPaise + adjustmentsPaise;
+    const roundedAmountPaise = Math.round(subtotalAfterPaise / 100) * 100;
+    const roundedTotal = roundedAmountPaise / 100;
+    const balanceDuePaise = roundedAmountPaise - (payments.reduce((sum, p) => sum + p.amount, 0) * 100);
+    const balanceDue = balanceDuePaise / 100;
+    
+    document.getElementById('detailSubtotal').textContent = `Rs. ${formatINR(subtotalAfterPaise / 100)}`;
     document.getElementById('detailDiscount').textContent = `-Rs. ${formatINR(invoice.discountAmount)}`;
-    document.getElementById('detailTotal').textContent = `Rs. ${formatINR(invoice.total)}`;
-    document.getElementById('detailBalance').textContent = `Rs. ${formatINR(invoice.balanceDue)}`;
+    document.getElementById('detailTotal').textContent = `Rs. ${formatINR(roundedTotal)}`;
+    document.getElementById('detailBalance').textContent = `Rs. ${formatINR(Math.max(0, balanceDue))}`;
     
     const paymentsContainer = document.getElementById('detailPayments');
     paymentsContainer.innerHTML = '';

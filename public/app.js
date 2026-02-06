@@ -1757,16 +1757,7 @@ async function showTab(tabName) {
     // 2. Conditional visibility based on tabName
     if (tabName === 'invoices') {
         invoices.classList.remove('hidden');
-        if (typeof initializeInvoiceMonthPicker === 'function') {
-            initializeInvoiceMonthPicker();
-        } else {
-            // Fallback: set default month and render
-            const picker = document.getElementById('invoiceMonthPicker');
-            if (picker) {
-                picker.value = new Date().toISOString().slice(0, 7);
-                if (typeof renderInvoices === 'function') renderInvoices();
-            }
-        }
+        initializeInvoiceMonthPicker();
     }
     else if (tabName === 'calendar') {
         const calendar = document.getElementById('calendarScreen');

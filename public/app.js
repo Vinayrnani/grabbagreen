@@ -8,22 +8,8 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     });
 }
 
-const db = new Dexie("SaladDB");
-
 // Track pending changes for smart sync
 let hasPendingChanges = false;
-
-// Around line 14 in app.js
-db.version(13).stores({ // Increment version to 13 - added invoice system
-    customers: '++id, name, nickname, route, plan, status, vacationUntil, pendingAddonDate, mobile, discount',
-    attendance: '++id, [custId+date], date, status, addons, isWalkIn, quantity, isVacation, inclusion, addon, coupleAddon1, coupleAddon2, extraAddons',
-    logs: '++id, timestamp, action',
-    settings: 'id, value', // Added for Holiday List
-    invoices: '++id, custId, monthYear, invoiceNumber, status, subTotal, discountAmount, adjustmentsTotal, total, balanceDue, generatedAt, sentAt, [custId+monthYear]',
-    invoiceItems: '++id, invoiceId, type, description, quantity, unitPrice, amount',
-    invoiceAdjustments: '++id, invoiceId, type, description, amount',
-    payments: '++id, invoiceId, amount, date, method, notes'
-});
 
 // Monkey-patch Dexie methods to track changes for smart sync
 db.customers.hook('creating', () => { hasPendingChanges = true; updateSyncIndicator('pending'); });

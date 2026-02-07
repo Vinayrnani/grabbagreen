@@ -214,22 +214,22 @@
 
         <div id="invoiceScreen" class="hidden flex flex-col h-full">
             <!-- Sticky Header -->
-            <div class="sticky top-0 z-30 bg-[#f6fafc] pt-2">
-                <div class="bg-white rounded-3xl p-4 shadow-sm border border-gray-100 mb-4">
+            <div class="sticky top-0 z-30 bg-[#f6fafc]">
+                <div class="bg-white rounded-3xl p-2 pr-4 pl-4 shadow-sm border border-gray-100 mb-2">
                     <div class="flex justify-between items-center mb-3">
                         <h3 id="invoices" class="text-sm font-black italic uppercase tracking-tighter">Billing Period</h3>
                         <button onclick="generateAllInvoicesForMonth()" class="bg-green-600 text-white px-4 py-2 rounded-xl text-xs font-bold">Generate Invoices</button>
                     </div>
                     <input type="month" id="invoiceMonthPicker" onchange="renderInvoices()"
-                        class="w-full p-4 bg-gray-50 rounded-2xl border-none font-bold text-gray-700">
+                        class="w-full p-2 bg-gray-50 rounded-2xl border-none font-bold text-gray-700">
                 </div>
                 
-                <div class="flex justify-center gap-2 mb-4 overflow-x-auto px-2">
-                    <button onclick="filterInvoices('all')" class="filter-btn px-4 py-2 rounded-full text-xs font-bold bg-gray-800 text-white">All</button>
-                    <button onclick="filterInvoices('draft')" class="filter-btn px-4 py-2 rounded-full text-xs font-bold bg-gray-100 text-gray-600">Draft</button>
-                    <button onclick="filterInvoices('sent')" class="filter-btn px-4 py-2 rounded-full text-xs font-bold bg-gray-100 text-gray-600">Sent</button>
-                    <button onclick="filterInvoices('partial')" class="filter-btn px-4 py-2 rounded-full text-xs font-bold bg-gray-100 text-gray-600">Partial</button>
-                    <button onclick="filterInvoices('paid')" class="filter-btn px-4 py-2 rounded-full text-xs font-bold bg-gray-100 text-gray-600">Paid</button>
+                <div class="flex justify-center gap-2 mb-2 overflow-x-auto px-2">
+                    <button onclick="filterInvoices('all')" class="filter-btn px-4 py-1 rounded-full text-[12px] font-bold bg-gray-800 text-white">All</button>
+                    <button onclick="filterInvoices('draft')" class="filter-btn px-4 py-1 rounded-full text-[12px] font-bold bg-gray-100 text-gray-600">Draft</button>
+                    <button onclick="filterInvoices('sent')" class="filter-btn px-4 py-1 rounded-full text-[12px] font-bold bg-gray-100 text-gray-600">Sent</button>
+                    <button onclick="filterInvoices('partial')" class="filter-btn px-4 py-1 rounded-full text-[12px] font-bold bg-gray-100 text-gray-600">Partial</button>
+                    <button onclick="filterInvoices('paid')" class="filter-btn px-4 py-1 rounded-full text-[12px] font-bold bg-gray-100 text-gray-600">Paid</button>
                 </div>
             </div>
             
@@ -245,17 +245,17 @@
                 </div>
             </div>
         </div>
-        <div id="calendarScreen" class="tab-content hidden px-4">
+        <div id="calendarScreen" class="tab-content hidden px-2">
             <div class="sticky top-0 z-20 bg-[#f8fafc] ">
                 <div class="bg-white rounded-3xl p-3 shadow-sm border border-gray-100">
                     <div class="mb-1">
                         <label class="text-[10px] font-black uppercase text-gray-400 mb-1 block">Select Customer</label>
                         <select id="calendarCustomerSelector" onchange="renderCalendar()"
-                            class="w-full p-3 bg-gray-50 rounded-2xl border-none font-bold text-gray-700 text-sm appearance-none">
+                            class="w-full p-1 pl-3 bg-gray-50 rounded-2xl border-none font-bold text-gray-700 text-sm appearance-none">
                         </select>
                     </div>
 
-                    <div class="flex justify-center items-center mb-1 border-t pt-2">
+                    <div class="flex justify-center items-center mb-1 border-t pt-1">
 
                         <div class="flex gap-2">
                             <button onclick="changeMonth(-1)" class="p-2 bg-gray-100 rounded-full text-xs">◀</button>

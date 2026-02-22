@@ -8,16 +8,258 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     });
 }
 
-const db = new Dexie("SaladDB");
-// Around line 14 in app.js
-db.version(8).stores({ // Increment version to 8
-    customers: '++id, name, nickname, route, plan, status, vacationUntil, pendingAddonDate, mobile, discount',
-    attendance: '++id, [custId+date], date, status, addons, isWalkIn, quantity, isVacation',
-    logs: '++id, timestamp, action',
-    settings: 'id, value' // Added for Holiday List
-});
+// Track pending changes for smart sync
+let hasPendingChanges = false;
 
-const PRICES = { Regular: 5000, Premium: 6500, MealBox: 7800, WalkIn: 200, Addon: 100 };
+// Monkey-patch Dexie methods to track changes for smart sync
+db.customers.hook('creating', () => { hasPendingChanges = true; updateSyncIndicator('pending'); });
+db.customers.hook('updating', () => { hasPendingChanges = true; updateSyncIndicator('pending'); });
+db.customers.hook('deleting', () => { hasPendingChanges = true; updateSyncIndicator('pending'); });
+
+db.attendance.hook('creating', () => { hasPendingChanges = true; updateSyncIndicator('pending'); });
+db.attendance.hook('updating', () => { hasPendingChanges = true; updateSyncIndicator('pending'); });
+db.attendance.hook('deleting', () => { hasPendingChanges = true; updateSyncIndicator('pending'); });
+
+db.invoices?.hook('creating', () => { hasPendingChanges = true; updateSyncIndicator('pending'); });
+db.invoices?.hook('updating', () => { hasPendingChanges = true; updateSyncIndicator('pending'); });
+db.invoices?.hook('deleting', () => { hasPendingChanges = true; updateSyncIndicator('pending'); });
+
+db.invoiceItems?.hook('creating', () => { hasPendingChanges = true; updateSyncIndicator('pending'); });
+db.invoiceItems?.hook('updating', () => { hasPendingChanges = true; updateSyncIndicator('pending'); });
+db.invoiceItems?.hook('deleting', () => { hasPendingChanges = true; updateSyncIndicator('pending'); });
+
+db.invoiceAdjustments?.hook('creating', () => { hasPendingChanges = true; updateSyncIndicator('pending'); });
+db.invoiceAdjustments?.hook('deleting', () => { hasPendingChanges = true; updateSyncIndicator('pending'); });
+
+db.payments?.hook('creating', () => { hasPendingChanges = true; updateSyncIndicator('pending'); });
+db.payments?.hook('deleting', () => { hasPendingChanges = true; updateSyncIndicator('pending'); });
+
+db.settings.hook('creating', () => { hasPendingChanges = true; updateSyncIndicator('pending'); });
+db.settings.hook('updating', () => { hasPendingChanges = true; updateSyncIndicator('pending'); });
+
+const PRICES = { Regular: 4999, Premium: 6499, 'Couple': 8999, MealBox: 7800, WalkIn: 200, Addon: 100 };
+
+// Helper to get plan abbreviation (1-2 letters)
+function getPlanAbbreviation(plan) {
+    if (!plan) return '';
+    const abbr = {
+        'Regular': 'R',
+        'Premium': 'P',
+        'MealBox': 'M',
+        'Couple': 'CP'
+    };
+    return abbr[plan] || plan.substring(0, 2).toUpperCase();
+}
+
+// Helper to get plan color for badges
+function getPlanColor(plan) {
+    const colors = {
+        'R': 'bg-emerald-500',
+        'P': 'bg-amber-500',
+        'M': 'bg-sky-500',
+        'CP': 'bg-green-500'
+    };
+    return colors[getPlanAbbreviation(plan)] || 'bg-gray-500';
+}
+
+// Helper to get default inclusion based on plan
+function getDefaultInclusion(plan) {
+    if (!plan) return 'S1';
+    const defaults = {
+        'Regular': 'S1',
+        'Premium': 'S1',
+        'Couple': 'S2',
+        'MealBox': 'M1'
+    };
+    return defaults[plan] || 'S1';
+}
+
+// Track pending inclusions temporarily before attendance is recorded
+const pendingInclusions = new Map();
+
+// Track pending addons for premium customers
+const pendingAddons = new Map();
+
+// Track pending free addons for couple customers (2 addons)
+const pendingCoupleAddons = new Map();
+
+// Track pending extra addons (up to 5)
+const pendingExtraAddons = new Map();
+
+// Package filter state - default to 'all' to show all customers
+let currentPackageFilter = 'all';
+
+// Set package filter and re-render
+function setPackageFilter(plan) {
+    // Toggle filter: if clicking same filter, go back to 'all'
+    if (currentPackageFilter === plan) {
+        currentPackageFilter = 'all';
+    } else {
+        currentPackageFilter = plan;
+    }
+    renderList();
+}
+
+// Update filter pills with counts
+function updateFilterPills(activeCustomers, attendanceMap) {
+    const plans = ['all', 'Regular', 'Premium', 'Couple', 'MealBox'];
+    const abbreviations = { all: 'All', Regular: 'R', Premium: 'P', Couple: 'CP', MealBox: 'M' };
+    const colors = {
+        all: 'bg-gray-800 text-white',
+        Regular: 'bg-emerald-500 text-white',
+        Premium: 'bg-amber-500 text-white',
+        Couple: 'bg-green-500 text-white',
+        MealBox: 'bg-sky-500 text-white'
+    };
+    
+    plans.forEach(plan => {
+        const btn = document.getElementById(`filter${plan.charAt(0).toUpperCase() + plan.slice(1)}`);
+        if (!btn) return;
+        
+        let total, marked;
+        if (plan === 'all') {
+            // Count all active customers
+            total = activeCustomers.length;
+            marked = activeCustomers.filter(c => attendanceMap.has(c.id)).length;
+        } else {
+            // Count active customers for this plan
+            const planCustomers = activeCustomers.filter(c => c.plan === plan);
+            total = planCustomers.length;
+            marked = planCustomers.filter(c => attendanceMap.has(c.id)).length;
+        }
+        
+        // Update text - add checkmark if all marked
+        const checkmark = (marked === total && total > 0) ? '✓ ' : '';
+        btn.textContent = `${checkmark}${abbreviations[plan]} ${marked}/${total}`;
+        
+        // Update styling - match card badge colors exactly
+        btn.className = 'filter-pill px-3 py-1 rounded-full text-[10px] font-bold transition-all';
+        if (currentPackageFilter === plan) {
+            btn.className += ` ${colors[plan]}`;
+        } else {
+            btn.className += ' bg-gray-100 text-gray-600';
+        }
+    });
+}
+
+// Default addon options
+const ADDON_OPTIONS = {
+    'C': 'Grilled Chicken',
+    'PR': 'Grilled Prawns',
+    'F': 'Grilled Fish',
+    'SE': 'Scrambled Eggs',
+    'BE': 'Boiled Eggs',
+    'P': 'Grilled Paneer',
+    'T': 'Grilled Tofu',
+    'A': 'Avocado',
+    'V': 'Mix Veggies',
+    'S': 'Extra Salad'
+};
+
+const FREE_ADDON_OPTIONS = ['C', 'F', 'SE', 'BE', 'T', 'P'];
+
+async function renderAddonOptions(type) {
+    const container = document.getElementById('addonOptions');
+    container.innerHTML = '';
+    
+    let options;
+    if (type === 'free') {
+        // Check if daily addons are selected
+        const todayAddons = getTodaySelectedAddons();
+        
+        if (todayAddons && todayAddons.length > 0) {
+            // Show the selected daily addons
+            options = todayAddons;
+        } else {
+            options = FREE_ADDON_OPTIONS;
+        }
+    } else {
+        options = Object.keys(ADDON_OPTIONS);
+    }
+    
+    // Update modal title based on type
+    const title = type === 'free' ? 'Select Free Addon' : 'Select Addon';
+    document.querySelector('#addonModal h2').innerText = title;
+    
+    options.forEach(addon => {
+        const name = ADDON_OPTIONS[addon];
+        const emoji = getAddonEmoji(addon);
+        const btn = document.createElement('button');
+        btn.className = 'w-full p-2 bg-gray-50 rounded-lg font-bold text-gray-800 active:bg-gray-100 text-left text-sm';
+        btn.onclick = () => selectAddon(addon);
+        btn.innerHTML = `${emoji} ${addon} - ${name}`;
+        container.appendChild(btn);
+    });
+}
+
+function getAddonEmoji(addon) {
+    const emojis = {
+        'C': '🍗',
+        'PR': '🦐',
+        'F': '🐟',
+        'SE': '🍳',
+        'BE': '🥚',
+        'P': '🧀',
+        'T': '🧈',
+        'A': '🥑',
+        'V': '🥗',
+        'S': '🥬'
+    };
+    return emojis[addon] || '📦';
+}
+
+async function getUsedCoupleAddonsCount(custId) {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+    const endDate = `${year}-${String(month + 1).padStart(2, '0')}-31`;
+
+    const monthAttendance = await db.attendance
+        .where('custId').equals(custId)
+        .filter(record => record.date >= startDate && record.date <= endDate)
+        .toArray();
+
+    let usedCount = 0;
+    for (const record of monthAttendance) {
+        if (record.coupleAddon1) usedCount++;
+        if (record.coupleAddon2) usedCount++;
+    }
+
+    return usedCount;
+}
+
+function loadPendingAddons() {
+    pendingAddons.clear();
+    pendingCoupleAddons.clear();
+    pendingExtraAddons.clear();
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key.startsWith('addon_')) {
+            const custId = parseInt(key.replace('addon_', ''));
+            const value = localStorage.getItem(key);
+            pendingAddons.set(custId, value);
+        }
+        if (key.startsWith('coupleAddon1_')) {
+            const custId = parseInt(key.replace('coupleAddon1_', ''));
+            const value = localStorage.getItem(key);
+            pendingCoupleAddons.set(custId + '_1', value);
+        }
+        if (key.startsWith('coupleAddon2_')) {
+            const custId = parseInt(key.replace('coupleAddon2_', ''));
+            const value = localStorage.getItem(key);
+            pendingCoupleAddons.set(custId + '_2', value);
+        }
+        if (key.startsWith('extraAddon_')) {
+            const custId = parseInt(key.split('_')[1]);
+            const index = parseInt(key.split('_')[2]);
+            const value = localStorage.getItem(key);
+            const arr = pendingExtraAddons.get(custId) || [];
+            arr[index] = value;
+            pendingExtraAddons.set(custId, arr);
+        }
+    }
+}
 
 const now = new Date();
 const offset = now.getTimezoneOffset() * 60000; // offset in milliseconds
@@ -28,9 +270,269 @@ let selectedDate = localISOTime;
 // Utility to get YYYY-MM-DD
 //const getToday = () => new Date().toISOString().split('T')[0];
 
+// Helper function to generate a single card HTML
+function generateCardHTML(cust, todayEntry, attendanceMap, coupleAddonCounts, viewDate) {
+    const hasPendingAddon = cust.pendingAddonDate === viewDate;
+    
+    let addonBadge = "";
+    if (todayEntry && todayEntry.addons > 0) {
+        addonBadge = `<span class="bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded ml-2 border border-blue-800">ADD-ON INCLUDED</span>`;
+    } else if (!todayEntry && cust.pendingAddonDate === viewDate) {
+        addonBadge = `<span class="bg-yellow-400 text-black text-[10px] font-black px-2 py-0.5 rounded ml-2 animate-pulse border border-yellow-600">ADD-ON REQUESTED</span>`;
+    }
+
+    let statusConfig = {
+        cardClass: 'bg-white border-green-500 shadow-md',
+        badge: '',
+        hint: '',
+        isLocked: false
+    };
+
+    // Check for Vacation, Delivered, or Skipped status
+    if (todayEntry && todayEntry.isVacation) {
+        statusConfig = {
+            cardClass: 'bg-vacation-muted border-blue-400',
+            badge: '',
+            hint: `<p class="text-slate-500 text-xs mt-1 font-medium italic">Auto-skipped until ${cust.vacationUntil}</p>`,
+            isLocked: true,
+            statusIcon: `<div class="w-10 h-10 rounded-lg text-3xl flex items-center justify-center">🏖️</div>`,
+            actionButton: `<button onclick="resumeVacationEarly(${cust.id})" class="btn-resume text-[10px] px-3 py-2 rounded-lg font-bold shadow-md pointer-events-auto">RESUME EARLY</button>`
+        };
+    } else if (todayEntry) {
+        if (todayEntry.status === 'delivered') {
+            statusConfig = {
+                cardClass: 'bg-green-50 border-green-700 shadow-inner',
+                badge: '',
+                isLocked: true,
+                statusIcon: `<div class="h-10 rounded-lg bg-green-700 text-white flex items-center justify-center font-bold text-[10px] px-4 tracking-wide min-w-[85px]">DELIVERED</div>`
+            };
+        } else {
+            statusConfig = {
+                cardClass: 'bg-orange-50 border-orange-700 shadow-inner',
+                badge: '',
+                isLocked: true,
+                statusIcon: `<div class="h-10 rounded-lg bg-orange-700 text-white flex items-center justify-center font-bold text-[10px] px-4 tracking-wide min-w-[85px]">SKIPPED</div>`
+            };
+        }
+    }
+
+    const planColors = {
+        'R': 'bg-slate-500',
+        'P': 'bg-amber-500',
+        'M': 'bg-sky-500',
+        'CP': 'bg-green-600'
+    };
+    const planColor = planColors[getPlanAbbreviation(cust.plan)] || 'bg-gray-500';
+    const isCouple = getPlanAbbreviation(cust.plan) === 'CP';
+    const isPremium = getPlanAbbreviation(cust.plan) === 'P';
+    
+    // Get inclusion: pending > todayEntry > default
+    let inclusion = pendingInclusions.get(cust.id);
+    if (!inclusion && todayEntry) {
+        inclusion = todayEntry.inclusion || getDefaultInclusion(cust.plan);
+    }
+    inclusion = inclusion || getDefaultInclusion(cust.plan);
+    
+    // Get addon for premium customers
+    let addon = pendingAddons.get(cust.id);
+    if (!addon && todayEntry) {
+        addon = todayEntry.addon || 'C';
+    }
+    addon = addon || 'C';
+    
+    // Get free addons for couple customers
+    let coupleAddon1 = pendingCoupleAddons.get(cust.id + '_1');
+    if (!coupleAddon1 && todayEntry) {
+        coupleAddon1 = todayEntry.coupleAddon1;
+    }
+    let coupleAddon2 = pendingCoupleAddons.get(cust.id + '_2');
+    if (!coupleAddon2 && todayEntry) {
+        coupleAddon2 = todayEntry.coupleAddon2;
+    }
+
+    // Get extra addons: pending > todayEntry > empty
+    let extraAddons = pendingExtraAddons.get(cust.id);
+    if (!extraAddons && todayEntry) {
+        extraAddons = todayEntry.extraAddons || [];
+    }
+    extraAddons = extraAddons || [];
+
+    const isOnVacation = todayEntry && todayEntry.isVacation;
+
+    return `
+        <div id="card-${cust.id}" class="customer-card p-4 rounded-xl border-l-8 flex justify-between items-center transition-all shadow-2xl h-[100px] ${statusConfig.cardClass}">
+            <div class="flex-1 relative h-[90px]">
+                <div class="flex items-center gap-2 py-0.5">
+                    <span class="bg-gray-800 text-white text-[10px] px-2 py-0.5 rounded font-bold">${cust.route}</span>
+                    <span class="${planColor} text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center shadow-sm">${getPlanAbbreviation(cust.plan)}</span>
+                    <h3 class="font-bold text-xl text-gray-900">${cust.name} ${addonBadge}</h3>
+                </div>
+                
+                ${!isOnVacation && !(todayEntry && todayEntry.status === 'skipped') ? `
+                <!-- Line 2: Inclusions & Addon -->
+                <div class="flex items-center gap-2 py-0.5">
+                    <span class="text-black text-sm font-bold">INC:</span>
+                    ${isCouple
+                        ? `<button ${!statusConfig.isLocked ? `onclick="toggleInclusion(${cust.id})"` : ''} class="text-xs px-2 py-0.5 rounded font-bold active:scale-95 transition-transform ${inclusion === 'S2' ? 'bg-orange-400 text-white' : 'bg-blue-500 text-white'} ${statusConfig.isLocked ? 'opacity-50' : ''}">${inclusion}</button>`
+                        : `<span class="bg-blue-500 text-white text-xs px-2 py-0.5 rounded font-bold">${inclusion}</span>`
+                    }
+                    ${isPremium ? `
+                    <span class="text-black text-sm font-bold">Addon:</span>
+                    <button ${!statusConfig.isLocked ? `onclick="openAddonModal(${cust.id})"` : ''} class="text-xs px-2 py-0.5 rounded font-bold active:scale-95 transition-transform ${['C', 'F', 'SE', 'BE'].includes(addon) ? 'bg-red-100 text-red-700 border border-red-300' : 'bg-green-100 text-green-700 border border-green-300'} ${statusConfig.isLocked ? 'opacity-50' : ''}">
+                        ${addon}
+                    </button>
+                    ` : ''}
+                    ${isCouple ? (() => {
+                        const usedThisMonth = coupleAddonCounts[cust.id] || 0;
+                        
+                        // If monthly quota exhausted, hide addon section on unlocked cards
+                        if (usedThisMonth >= 2 && !statusConfig.isLocked) {
+                            return '';
+                        }
+                        
+                        // Locked cards: show only what was actually delivered
+                        if (statusConfig.isLocked) {
+                            if (!coupleAddon1 && !coupleAddon2) {
+                                return '';
+                            }
+                            let html = `<span class="text-black text-sm font-bold">Addon:</span>`;
+                            if (coupleAddon1) {
+                                html += `<button class="text-xs px-2 py-0.5 rounded font-bold bg-red-100 text-red-700 border border-red-300 opacity-50">${coupleAddon1}</button>`;
+                            }
+                            if (coupleAddon2) {
+                                html += `<button class="text-xs px-2 py-0.5 rounded font-bold bg-red-100 text-red-700 border border-red-300 opacity-50">${coupleAddon2}</button>`;
+                            }
+                            return html;
+                        }
+                        
+                        // Unlocked cards: show slots based on monthly usage
+                        let html = `<span class="text-black text-sm font-bold">Addon:</span>`;
+                        
+                        // First slot - always available
+                        html += `<button onclick="openCoupleAddonModal(${cust.id}, 1)" class="text-xs px-2 py-0.5 rounded font-bold active:scale-95 transition-transform ${coupleAddon1 && ['C', 'F', 'SE', 'BE'].includes(coupleAddon1) ? 'bg-red-100 text-red-700 border border-red-300' : coupleAddon1 ? 'bg-green-100 text-green-700 border border-green-300' : 'bg-gray-200 text-gray-500 border border-gray-300'}">${coupleAddon1 || '-'}</button>`;
+                        
+                        // Second slot - only if no addons used this month
+                        if (usedThisMonth === 0) {
+                            html += `<button onclick="openCoupleAddonModal(${cust.id}, 2)" class="text-xs px-2 py-0.5 rounded font-bold active:scale-95 transition-transform ${coupleAddon2 && ['C', 'F', 'SE', 'BE'].includes(coupleAddon2) ? 'bg-red-100 text-red-700 border border-red-300' : coupleAddon2 ? 'bg-green-100 text-green-700 border border-green-300' : 'bg-gray-200 text-gray-500 border border-gray-300'}">${coupleAddon2 || '-'}</button>`;
+                        }
+                        
+                        return html;
+                    })() : ''}
+                </div>
+
+                <!-- Line 3: Extra Addons -->
+                ${!isOnVacation && !(todayEntry && todayEntry.status === 'skipped') && (extraAddons.length > 0 || (!statusConfig.isLocked)) ? `
+                <div class="flex items-center gap-2 py-0.5">
+                    ${!statusConfig.isLocked || extraAddons.length > 0 ? `
+                        <span class="text-black text-sm font-bold">Extra Addons:</span>
+                    ` : ''}
+                    ${extraAddons.length > 0 ? `
+                        ${extraAddons.map((ea, idx) => `
+                            <button ${!statusConfig.isLocked ? `onclick="removeExtraAddon(${cust.id}, ${idx})"` : ''} class="text-xs px-2 py-0.5 rounded font-bold ${['C', 'F', 'SE', 'BE'].includes(ea) ? 'bg-red-100 text-red-700 border border-red-300' : 'bg-green-100 text-green-700 border border-green-300'} ${statusConfig.isLocked ? 'opacity-50' : ''}">
+                                ${ea}
+                            </button>
+                        `).join('')}
+                    ` : ''}
+                    ${extraAddons.length < 5 && !statusConfig.isLocked ? `
+                        <button onclick="openExtraAddonModal(${cust.id})" class="w-6 h-6 rounded-full bg-purple-500 text-white font-bold text-sm flex items-center justify-center active:scale-95 transition-transform">+</button>
+                    ` : ''}
+                </div>
+                ` : ''}
+                ` : ''}
+
+                <div class="absolute bottom-0 left-0">
+                    ${statusConfig.isLocked ? '' : statusConfig.hint}
+                </div>
+            </div>
+            <div class="flex flex-col items-center justify-center gap-2">
+                ${statusConfig.statusIcon || ''}
+                ${statusConfig.isLocked && statusConfig.actionButton ? statusConfig.actionButton : ''}
+            </div>
+        </div>
+    `;
+}
+
+// Smart update function - updates only a single card
+async function updateSingleCard(custId) {
+    const viewDate = selectedDate || getToday();
+    const list = document.getElementById('attendanceList');
+    
+    // Check if it's a holiday
+    const holidayData = await db.settings.get('holidayList');
+    const dynamicHolidays = holidayData ? holidayData.value : [];
+    const dateObj = new Date(viewDate);
+    const isSunday = dateObj.getDay() === 0;
+    const isPublicHoliday = dynamicHolidays.includes(viewDate);
+    
+    if (isSunday || isPublicHoliday) {
+        // On holidays, full re-render needed
+        return renderList();
+    }
+    
+    const cust = await db.customers.get(custId);
+    if (!cust) {
+        // Customer not found, do full re-render
+        return renderList();
+    }
+    
+    const todayEntry = await db.attendance.where({ custId: custId, date: viewDate }).first();
+    const dayAttendance = await db.attendance.where('date').equals(viewDate).toArray();
+    const attendanceMap = new Map(dayAttendance.map(a => [a.custId, a]));
+    
+    // Calculate couple addon counts
+    const coupleAddonCounts = {};
+    if (cust.plan === 'Couple') {
+        coupleAddonCounts[custId] = await getUsedCoupleAddonsCount(custId);
+    }
+    
+    // Check if customer should be in active or inactive section
+    const hasRecord = attendanceMap.has(custId);
+    const isActive = cust.status !== 'inactive' || hasRecord;
+    
+    // Find existing card
+    const existingCard = document.getElementById(`card-${custId}`);
+    
+    if (existingCard) {
+        // Update existing card
+        if (!isActive) {
+            // Card moved to inactive section, need full re-render
+            return renderList();
+        }
+        
+        // Generate new HTML and replace
+        const newHTML = generateCardHTML(cust, todayEntry, attendanceMap, coupleAddonCounts, viewDate);
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = newHTML;
+        const newCard = tempDiv.firstElementChild;
+        
+        // Copy event listeners setup
+        if (!todayEntry || (!todayEntry.isVacation && todayEntry.status !== 'delivered' && todayEntry.status !== 'skipped')) {
+            setupSwipe(newCard, cust);
+        }
+        setupLongPress(newCard, custId);
+        
+        // Replace old card with new
+        existingCard.replaceWith(newCard);
+        
+        // Update filter pills counts after marking
+        const allCustomers = await db.customers.toArray();
+        const activeCustomers = allCustomers.filter(c => {
+            const hasRecord = attendanceMap.has(c.id);
+            const isCurrentlyActive = c.status !== 'inactive';
+            return isCurrentlyActive || hasRecord;
+        });
+        updateFilterPills(activeCustomers, attendanceMap);
+    } else {
+        // Card doesn't exist, might be a new customer or status change
+        // Do full re-render
+        return renderList();
+    }
+}
+
 async function renderList() {
     // --- SCROLL FIX START ---
-    const scrollPos = window.scrollY;
+    const mainEl = document.querySelector('main');
+    const scrollPos = mainEl ? mainEl.scrollTop : window.scrollY;
     // --- SCROLL FIX END ---
 
     const list = document.getElementById('attendanceList');
@@ -68,7 +570,12 @@ async function renderList() {
         if (subscriberText) subscriberText.style.display = 'none';
         if (walkinSection) walkinSection.style.display = 'none';
 
-        window.scrollTo(0, scrollPos);
+        // Restore scroll position smoothly
+        if (mainEl) {
+            mainEl.scrollTo({ top: scrollPos, behavior: 'auto' });
+        } else {
+            window.scrollTo({ top: scrollPos, behavior: 'auto' });
+        }
         return; // Stop execution
     } else {
         // Show walk-in section on working days
@@ -96,94 +603,60 @@ async function renderList() {
         return isCurrentlyActive || hasRecord;
     });
 
+    // Update filter pills with counts (before applying package filter)
+    updateFilterPills(activeCustomers, attendanceMap);
+
+    // Apply package filter if set (and not 'all')
+    if (currentPackageFilter !== 'all') {
+        activeCustomers = activeCustomers.filter(c => c.plan === currentPackageFilter);
+    }
+
     // Inactive List: Show only if currently inactive AND no record exists for this date
+    // Note: Inactive customers not affected by package filter
     const inactiveCustomers = allCustomers.filter(c => {
         const hasRecord = attendanceMap.has(c.id);
         const isCurrentlyInactive = c.status === 'inactive';
         return isCurrentlyInactive && !hasRecord;
     });
+    
+    // 2. Pre-calculate couple addon counts for the current month
+    const coupleAddonCounts = {};
+    for (const cust of [...activeCustomers, ...inactiveCustomers]) {
+        if (cust.plan === 'Couple') {
+            coupleAddonCounts[cust.id] = await getUsedCoupleAddonsCount(cust.id);
+        }
+    }
 
     // 3. RENDER ACTIVE/HISTORICAL CARDS
     for (const cust of activeCustomers) {
         const todayEntry = attendanceMap.get(cust.id);
-        const hasPendingAddon = cust.pendingAddonDate === viewDate;
         
-        let addonBadge = "";
-        if (todayEntry && todayEntry.addons > 0) {
-            addonBadge = `<span class="bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded ml-2 border border-blue-800">ADD-ON INCLUDED</span>`;
-        } else if (!todayEntry && cust.pendingAddonDate === viewDate) {
-            addonBadge = `<span class="bg-yellow-400 text-black text-[10px] font-black px-2 py-0.5 rounded ml-2 animate-pulse border border-yellow-600">ADD-ON REQUESTED</span>`;
-        }
-
-        let statusConfig = {
-            cardClass: 'bg-white border-green-500 shadow-md',
-            badge: '',
-            hint: '<p class="text-blue-500 text-[10px] mt-1 italic animate-pulse">Swipe Right: Delivered | Left: Skip</p>',
-            isLocked: false
-        };
-
-        // Check for Vacation, Delivered, or Skipped status
-        if (todayEntry && todayEntry.isVacation) {
-            statusConfig = {
-                cardClass: 'bg-vacation-muted border-blue-400',
-                badge: `<span class="status-badge bg-slate-500 text-white">ON VACATION</span>`,
-                hint: `<p class="text-slate-500 text-xs mt-1 font-medium italic">Auto-skipped until ${cust.vacationUntil}</p>`,
-                isLocked: true,
-                actionButton: `<button onclick="resumeVacationEarly(${cust.id})" class="btn-resume text-[10px] px-3 py-2 rounded-lg font-bold shadow-md pointer-events-auto">RESUME EARLY</button>`
-            };
-        } else if (todayEntry) {
-            if (todayEntry.status === 'delivered') {
-                statusConfig = {
-                    cardClass: 'bg-green-100 border-green-700 shadow-inner',
-                    badge: '<span class="status-badge bg-green-700 text-white">✓ DELIVERED</span>',
-                    isLocked: true
-                };
-            } else {
-                statusConfig = {
-                    cardClass: 'bg-orange-100 border-orange-700 shadow-inner',
-                    badge: '<span class="status-badge bg-orange-700 text-white">⚠ SKIPPED</span>',
-                    isLocked: true
-                };
-            }
-        }
-
-        const card = document.createElement('div');
-        card.className = `customer-card p-4 rounded-xl border-l-8 flex justify-between items-center transition-all ${statusConfig.cardClass}`;
-
+        // Generate card HTML using helper function
+        const cardHTML = generateCardHTML(cust, todayEntry, attendanceMap, coupleAddonCounts, viewDate);
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = cardHTML;
+        const card = tempDiv.firstElementChild;
+        
+        // Setup event handlers
         setupLongPress(card, cust.id);
-
-        card.innerHTML = `
-            <div class="flex-1">
-                <div class="flex items-center gap-2">
-                    <span class="bg-gray-800 text-white text-[10px] px-2 py-0.5 rounded-full font-bold">${cust.route}</span>
-                    <h3 class="font-bold text-lg text-gray-900">${cust.name} ${addonBadge}</h3>
-                </div>
-                <p class="text-xs text-gray-600 font-semibold uppercase tracking-tighter">${cust.plan}</p>
-                
-                <div class="h-8 flex items-center">
-                    ${statusConfig.badge || (statusConfig.isLocked ? '' : statusConfig.hint)}
-                </div>
-            </div>
-            <div class="flex flex-col gap-2">
-                ${statusConfig.isLocked && statusConfig.actionButton ? statusConfig.actionButton : ''}
-                ${!statusConfig.isLocked ? `
-                    <button onclick="openVacationModal(${cust.id})" class="text-[10px] bg-white border border-orange-300 text-orange-700 px-3 py-1.5 rounded-lg font-bold shadow-sm">VACATION</button>
-                    <button onclick="addAddon(${cust.id})" ${hasPendingAddon ? 'disabled' : ''} 
-                        class="text-[10px] ${hasPendingAddon ? 'bg-gray-100 text-gray-400 border-gray-200' : 'bg-white border-blue-300 text-blue-700'} px-3 py-1.5 rounded-lg font-bold shadow-sm">
-                        ${hasPendingAddon ? 'ADDON SET' : '+ ADDON'}
-                    </button>
-                ` : ''}
-            </div>
-        `;
-
+        
+        // Check status for swipe setup
+        let statusConfig = { isLocked: false };
+        if (todayEntry && todayEntry.isVacation) {
+            statusConfig.isLocked = true;
+        } else if (todayEntry) {
+            statusConfig.isLocked = true;
+        }
+        
         if (!statusConfig.isLocked) {
             setupSwipe(card, cust);
         }
+        
         list.appendChild(card);
     }
 
-    // 4. RENDER INACTIVE "BASEMENT"
-    if (inactiveCustomers.length > 0) {
+    // 4. RENDER INACTIVE "BASEMENT" - Only show when not filtering
+    if (currentPackageFilter === 'all' && inactiveCustomers.length > 0) {
         const div = document.createElement('div');
         div.className = "py-8 text-center text-gray-400 text-[10px] font-bold uppercase tracking-[0.3em]";
         div.innerText = "— Inactive Customers —";
@@ -195,17 +668,21 @@ async function renderList() {
             setupLongPress(iCard, c.id);
             iCard.innerHTML = `
                 <div>
-                    <h4 class="font-bold text-gray-500">${c.name}</h4>
-                    <p class="text-[10px] uppercase tracking-tighter font-semibold">${c.plan}</p>
+                    <span class="font-bold text-gray-500 text-sm">${c.name}</span>
                 </div>
-                <div class="bg-gray-200 text-gray-500 text-[9px] px-2 py-1 rounded font-black">${c.route}</div>
+                <div class="bg-gray-200 text-gray-500 text-[8px] px-1.5 py-0.5 rounded font-bold">${c.route}</div>
             `;
             list.appendChild(iCard);
         });
     }
 
     // --- SCROLL FIX END ---
-    window.scrollTo(0, scrollPos);
+    // Restore scroll position smoothly
+    if (mainEl) {
+        mainEl.scrollTo({ top: scrollPos, behavior: 'auto' });
+    } else {
+        window.scrollTo({ top: scrollPos, behavior: 'auto' });
+    }
 }
 
 
@@ -288,6 +765,19 @@ async function recordAttendance(custId, status) {
         // Calculate final addon count
         // Only charge for addon if it was requested AND delivered
         const finalAddons = (status === 'delivered' && hasPendingAddon) ? 1 : 0;
+        
+        // Get inclusion: pending > default
+        const inclusion = pendingInclusions.get(custId) || getDefaultInclusion(customer.plan);
+        
+        // Get addon for premium customers
+        const addon = pendingAddons.get(custId);
+        
+        // Get free addons for couple customers
+        const coupleAddon1 = pendingCoupleAddons.get(custId + '_1');
+        const coupleAddon2 = pendingCoupleAddons.get(custId + '_2');
+
+        // Get extra addons
+        const extraAddons = pendingExtraAddons.get(custId) || [];
 
         const id = await db.attendance.add({
             custId: custId,
@@ -295,21 +785,77 @@ async function recordAttendance(custId, status) {
             status: status,
             addons: finalAddons,
             isWalkIn: false,
-            quantity: 1
+            quantity: 1,
+            inclusion: inclusion,
+            addon: addon || null,
+            coupleAddon1: coupleAddon1 || null,
+            coupleAddon2: coupleAddon2 || null,
+            extraAddons: extraAddons
         });
 
         // Always clear the pending flag once a swipe (any swipe) is done
         await db.customers.update(custId, { pendingAddonDate: null });
 
+        // Clear the pending inclusion for this customer
+        pendingInclusions.delete(custId);
+        localStorage.removeItem(`incl_${custId}`);
+
+        // Clear the pending addon for this customer
+        pendingAddons.delete(custId);
+        localStorage.removeItem(`addon_${custId}`);
+
+        // Clear the pending couple addons for this customer
+        pendingCoupleAddons.delete(custId + '_1');
+        pendingCoupleAddons.delete(custId + '_2');
+        localStorage.removeItem(`coupleAddon1_${custId}`);
+        localStorage.removeItem(`coupleAddon2_${custId}`);
+
+        // Clear the pending extra addons for this customer
+        pendingExtraAddons.delete(custId);
+        for (let i = 0; i < extraAddons.length; i++) {
+            localStorage.removeItem(`extraAddon_${custId}_${i}`);
+        }
+
         lastAction = { type: 'attendance', id: id, custId: custId };
         showUndo(`Marked ${status} ${finalAddons ? 'with Add-on' : ''}`);
-
-        await renderList();
+        await updateSingleCard(custId);
 
     } catch (e) {
         console.error("Attendance Error:", e);
     } finally {
         isProcessing = false;
+    }
+}
+
+// Toggle status when user taps on the status buttons
+async function toggleStatus(custId, newStatus) {
+    if (isProcessing) return;
+    
+    const today = getToday();
+    const existingRecord = await db.attendance.where({ custId: custId, date: today }).first();
+    
+    if (existingRecord) {
+        // If clicking same status, toggle it off (remove the record)
+        if (existingRecord.status === newStatus) {
+            await db.attendance.delete(existingRecord.id);
+            showUndo('Status cleared');
+            await updateSingleCard(custId);
+            return;
+        }
+        // If different status, update the record
+        await db.attendance.update(existingRecord.id, { status: newStatus });
+        showUndo(`Changed to ${newStatus}`);
+        await updateSingleCard(custId);
+    } else {
+        // No existing record, create a new one
+        await db.attendance.add({
+            custId: custId,
+            date: today,
+            status: newStatus,
+            quantity: 1
+        });
+        showUndo(`Marked ${newStatus}`);
+        await updateSingleCard(custId);
     }
 }
 
@@ -350,6 +896,23 @@ async function openVacationModal(custId) {
             vacationUntil: resumeDate.toISOString().split('T')[0]
         });
 
+        // 3. Clear any pending localStorage data for this customer
+        pendingInclusions.delete(custId);
+        localStorage.removeItem(`incl_${custId}`);
+        
+        pendingAddons.delete(custId);
+        localStorage.removeItem(`addon_${custId}`);
+        
+        pendingCoupleAddons.delete(custId + '_1');
+        pendingCoupleAddons.delete(custId + '_2');
+        localStorage.removeItem(`coupleAddon1_${custId}`);
+        localStorage.removeItem(`coupleAddon2_${custId}`);
+        
+        pendingExtraAddons.delete(custId);
+        for (let i = 0; i < 5; i++) {
+            localStorage.removeItem(`extraAddon_${custId}_${i}`);
+        }
+
         showUndo(`Vacation set for ${days} days`);
         await renderList(); // Refresh UI to show the Blue Vacation card
     }
@@ -381,21 +944,74 @@ async function generateInvoice(custId) {
 
 // Initialize
 async function init() {
+    loadPendingInclusions();
+    loadPendingAddons();
+    
+    // Check if daily addon enforcement is enabled
+    const enforceSetting = localStorage.getItem('enforceDailyAddons');
+    const enforceDailyAddons = enforceSetting === 'true'; // Default to false (OFF)
+    
+    const today = getToday();
+    const dailyAddons = getTodaySelectedAddons();
+    
+    // Get yesterday's addons for fallback
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+    const yesterdayAddons = localStorage.getItem(`dailyAddons_${yesterdayStr}`);
+    
+    // Check if today is Sunday or holiday
+    const dateObj = new Date(today);
+    const isSunday = dateObj.getDay() === 0;
+    const holidayData = await db.settings.get('holidayList');
+    const dynamicHolidays = holidayData ? holidayData.value : [];
+    const isPublicHoliday = dynamicHolidays.includes(today);
+    const isHoliday = isSunday || isPublicHoliday;
+    
+    if (enforceDailyAddons && !isHoliday) {
+        // Enforcement ON and not a holiday - must select addons every day before proceeding
+        if (!dailyAddons || dailyAddons.length === 0) {
+            // Show daily addon selector before proceeding
+            openDailyAddonSelector();
+            return; // Stop init until addons are selected
+        } else {
+            // Store selected addons for the day
+            window.selectedDailyAddons = dailyAddons;
+        }
+    } else {
+        // Enforcement OFF or it's a holiday - use existing addons if available, otherwise yesterday's or all
+        if (dailyAddons && dailyAddons.length > 0) {
+            window.selectedDailyAddons = dailyAddons;
+        } else if (yesterdayAddons) {
+            // Fallback to yesterday's addons
+            const parsedYesterday = JSON.parse(yesterdayAddons);
+            window.selectedDailyAddons = parsedYesterday;
+            localStorage.setItem(`dailyAddons_${today}`, JSON.stringify(parsedYesterday));
+        } else {
+            // Fallback to random 3 addons
+            const shuffled = [...FREE_ADDON_OPTIONS].sort(() => 0.5 - Math.random());
+            const randomAddons = shuffled.slice(0, 3);
+            window.selectedDailyAddons = randomAddons;
+            localStorage.setItem(`dailyAddons_${today}`, JSON.stringify(randomAddons));
+        }
+    }
+    
     const count = await db.customers.count();
     if (count === 0) {
         await db.customers.bulkAdd([
             { name: "Amit Kumar", nickname: "Amit", route: "A", plan: "Premium", status: "active", vacationUntil: null },
-            { name: "Sneha Reddy", nickname: "Sneha", route: "B", plan: "Regular", status: "active", vacationUntil: null }
+            { name: "Sneha Reddy", nickname: "Sneha", route: "B", plan: "Regular", status: "active", vacationUntil: null },
+            { name: "Rohan & Priya", nickname: "RohanP", route: "C", plan: "Couple", status: "active", vacationUntil: null }
         ]);
     }
-    renderList();
+    renderApp();
 }
 /*async function showAddCustomer() {
     const name = prompt("Enter Customer Full Name:");
     if (!name) return;
     const nickname = prompt("Enter Nickname (for quick view):");
     const route = prompt("Enter Route (A, B, or C):").toUpperCase();
-    const plan = prompt("Enter Plan (Regular, Premium, MealBox):", "Regular");
+        const plan = prompt("Enter Plan (Regular, Premium, Couple, MealBox):", "Regular");
 
     await db.customers.add({
         name,
@@ -445,6 +1061,7 @@ function showAddCustomer() {
             <select id="newCustPlan" class="w-full border p-3 rounded-lg">
                 <option value="Regular">Regular (₹5000)</option>
                 <option value="Premium">Premium (₹6500)</option>
+                <option value="Couple">Couple (₹8999)</option>
                 <option value="MealBox">Meal Box (₹7800)</option>
             </select>
         </div>
@@ -508,6 +1125,8 @@ function showAddCustomer() {
     // Pass the saveWalkIn function to the modal confirm button
     openModal(html, saveWalkIn);
 }
+*/
+
 async function saveWalkIn() {
     const qtyInput = document.getElementById('walkInQty');
     const qty = parseInt(qtyInput.value);
@@ -524,29 +1143,107 @@ async function saveWalkIn() {
         showUndo(`Saved ₹${qty * 200} Walk-in`);
         closeModal();
     }
-}*/
+}
 
-// --- NEW FEATURE: ADD-ONS (₹100) ---
-async function addAddon(custId) {
-    if (!confirmDateAction("ADD-ON")) return;
-    const today = getToday();
+// Toggle inclusion for Couple package (S1 ↔ S2)
+function toggleInclusion(custId) {
+    const current = pendingInclusions.get(custId) || 'S2';
+    const toggled = current === 'S2' ? 'S1' : 'S2';
+    pendingInclusions.set(custId, toggled);
+    localStorage.setItem(`incl_${custId}`, toggled);
+    updateSingleCard(custId);
+}
 
-    try {
-        // Force the database to finish the update before moving to the next line
-        await db.customers.update(custId, {
-            pendingAddonDate: today
-        });
+// Load pending inclusions from localStorage
+function loadPendingInclusions() {
+    pendingInclusions.clear();
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key.startsWith('incl_')) {
+            const custId = parseInt(key.replace('incl_', ''));
+            const value = localStorage.getItem(key);
+            pendingInclusions.set(custId, value);
+        }
+    }
+}
 
-        // Store this for the Undo button
-        lastAction = { type: 'addon', custId: custId };
+let currentAddonCustId = null;
+let currentExtraAddonCustId = null;
 
-        showUndo("Add-on marked for this bowl");
+async function openAddonModal(custId) {
+    currentAddonCustId = custId;
+    currentExtraAddonCustId = null;
+    currentCoupleAddonCustId = null;
+    currentCoupleAddonSlot = null;
+    await renderAddonOptions('free');
+    document.getElementById('addonModal').classList.remove('hidden');
+}
 
-        // Now that the DB is 100% updated, redraw the UI
-        await renderList();
+function closeAddonModal() {
+    document.getElementById('addonModal').classList.add('hidden');
+    currentAddonCustId = null;
+    currentExtraAddonCustId = null;
+    currentCoupleAddonCustId = null;
+    currentCoupleAddonSlot = null;
+}
 
-    } catch (error) {
-        console.error("Addon Error:", error);
+function selectAddon(addon) {
+    if (currentCoupleAddonCustId && currentCoupleAddonSlot) {
+        const key = `coupleAddon${currentCoupleAddonSlot}_${currentCoupleAddonCustId}`;
+        pendingCoupleAddons.set(currentCoupleAddonCustId + '_' + currentCoupleAddonSlot, addon);
+        localStorage.setItem(key, addon);
+        updateSingleCard(currentCoupleAddonCustId);
+    } else if (currentExtraAddonCustId) {
+        const arr = pendingExtraAddons.get(currentExtraAddonCustId) || [];
+        if (arr.length < 5) {
+            arr.push(addon);
+            pendingExtraAddons.set(currentExtraAddonCustId, arr);
+            localStorage.setItem(`extraAddon_${currentExtraAddonCustId}_${arr.length - 1}`, addon);
+        }
+        updateSingleCard(currentExtraAddonCustId);
+    } else if (currentAddonCustId) {
+        pendingAddons.set(currentAddonCustId, addon);
+        localStorage.setItem(`addon_${currentAddonCustId}`, addon);
+        updateSingleCard(currentAddonCustId);
+    }
+    closeAddonModal();
+}
+
+// Couple addon selection
+let currentCoupleAddonCustId = null;
+let currentCoupleAddonSlot = null;
+
+async function openCoupleAddonModal(custId, slot) {
+    currentAddonCustId = null;
+    currentExtraAddonCustId = null;
+    currentCoupleAddonCustId = custId;
+    currentCoupleAddonSlot = slot;
+    await renderAddonOptions('free');
+    document.getElementById('addonModal').classList.remove('hidden');
+}
+
+// Extra addon selection
+
+async function openExtraAddonModal(custId) {
+    currentAddonCustId = null;
+    currentCoupleAddonCustId = null;
+    currentCoupleAddonSlot = null;
+    currentExtraAddonCustId = custId;
+    await renderAddonOptions('all');
+    document.getElementById('addonModal').classList.remove('hidden');
+}
+
+function removeExtraAddon(custId, index) {
+    if (confirm('Remove this extra addon?')) {
+        const arr = pendingExtraAddons.get(custId) || [];
+        arr.splice(index, 1);
+        pendingExtraAddons.set(custId, arr);
+        localStorage.removeItem(`extraAddon_${custId}_${index}`);
+        for (let i = index; i < arr.length; i++) {
+            localStorage.setItem(`extraAddon_${custId}_${i}`, arr[i]);
+            localStorage.removeItem(`extraAddon_${custId}_${i + 1}`);
+        }
+        updateSingleCard(custId);
     }
 }
 
@@ -669,11 +1366,11 @@ function getToday() {
 }
 
 
-const trueToday = new Date().toISOString().split('T')[0];
+const trueToday = localISOTime;
 
 
 
-// Reuse this guard in recordAttendance, addAddon, and openVacationModal
+// Reuse this guard in recordAttendance and openVacationModal
 function canExecuteAction(actionName) {
     if (selectedDate !== trueToday) {
         return confirm(`⚠️ ACTION WARNING\n\nYou are currently viewing ${selectedDate}.\nAre you sure you want to record ${actionName} for this date?`);
@@ -688,7 +1385,15 @@ function confirmDateAction(actionType) {
 }
 function toggleSettings() {
     const drawer = document.getElementById('settingsDrawer');
-    if (drawer) drawer.classList.toggle('hidden');
+    if (drawer) {
+        const isHidden = drawer.classList.contains('hidden');
+        drawer.classList.toggle('hidden');
+        
+        // Load toggle state when opening
+        if (isHidden) {
+            loadEnforceDailyAddonsToggle();
+        }
+    }
 
     // Safety check: only update if the element exists
     const versionEl = document.querySelector('.version-text');
@@ -794,7 +1499,7 @@ function setupLongPress(element, custId) {
         clearTimeout(pressTimer);
         pressTimer = setTimeout(() => {
             if (navigator.vibrate) navigator.vibrate(50);
-            openActionMenu(custId); // NEW: Open choice menu instead of direct edit
+            openActionMenu(custId);
         }, 600);
     };
 
@@ -821,6 +1526,17 @@ async function openActionMenu(custId) {
     // Only show the Reset button if a record exists for today
     const resetBtn = document.getElementById('resetActionBtn');
     resetBtn.style.display = record ? 'flex' : 'none';
+
+    // Hide Set Vacation button if:
+    // - Customer is already on vacation OR
+    // - Card is marked (delivered/skipped) OR
+    // - Viewing past date
+    const vacationBtn = document.getElementById('vacationActionBtn');
+    if ((record && record.isVacation) || (record && (record.status === 'delivered' || record.status === 'skipped')) || viewDate < trueToday) {
+        vacationBtn.style.display = 'none';
+    } else {
+        vacationBtn.style.display = 'flex';
+    }
 
     document.getElementById('actionMenu').classList.remove('hidden');
 }
@@ -856,6 +1572,12 @@ async function handleMenuReset() {
     closeActionMenu();
 }
 
+function handleMenuVacation() {
+    const id = menuActiveCustId;
+    closeActionMenu();
+    openVacationModal(id);
+}
+
 async function openEditModal(custId) {
     const cust = await db.customers.get(custId);
     currentEditingId = custId;
@@ -864,9 +1586,20 @@ async function openEditModal(custId) {
     document.getElementById('editFullName').value = cust.name || '';
     document.getElementById('editNickname').value = cust.nickname || '';
 
-    document.getElementById('editRoute').value = cust.route;
+    // Set radio button for route
+    const routeRadio = document.querySelector(`input[name="editRoute"][value="${cust.route}"]`);
+    if (routeRadio) routeRadio.checked = true;
+    
     document.getElementById('editPlan').value = cust.plan;
-    document.getElementById('editStatus').value = cust.status || 'active';
+    
+    // Set toggle state for account status
+    const statusToggle = document.getElementById('editStatusToggle');
+    const statusText = document.getElementById('editStatusText');
+    const isActive = (cust.status || 'active') === 'active';
+    statusToggle.checked = isActive;
+    statusText.textContent = isActive ? 'Active' : 'Inactive';
+    statusText.className = isActive ? 'text-sm font-bold text-green-600' : 'text-sm font-bold text-red-600';
+    
     document.getElementById('editDiscount').value = cust.discount || 0;
     document.getElementById('editmobile').value = cust.mobile || '';
 
@@ -879,9 +1612,9 @@ async function saveCustomerEdit() {
     const update = {
         name: document.getElementById('editFullName').value,
         nickname: document.getElementById('editNickname').value,
-        route: document.getElementById('editRoute').value,
+        route: document.querySelector('input[name="editRoute"]:checked')?.value || 'A',
         plan: document.getElementById('editPlan').value,
-        status: document.getElementById('editStatus').value,
+        status: document.getElementById('editStatusToggle').checked ? 'active' : 'inactive',
         mobile: document.getElementById('editmobile').value,
         discount: parseFloat(document.getElementById('editDiscount').value) || 0
     };
@@ -928,7 +1661,7 @@ async function updateWalkIn(type, change) {
 }
 
 async function renderApp() {
-    const date = selectedDate || new Date().toISOString().split('T')[0];
+    const date = selectedDate || localISOTime;
 
     // 1. Update counters using the standardized 'custId'
     const walkIn = await db.attendance.where({ custId: 0, date: date }).first() || { salad: 0, addon: 0 };
@@ -991,6 +1724,7 @@ async function showTab(tabName) {
     const addBtn = document.querySelector('button[onclick="showAddCustomer()"]');
     const picker = document.getElementById('mainDatePicker');
     const routeShareButton = document.getElementById('routesharebutton');
+    const walkin = document.getElementById('walkinContainer');
 
     // 1. Hide all screens first for a clean slate
 
@@ -1001,11 +1735,15 @@ async function showTab(tabName) {
     if (addBtn) addBtn.classList.add('hidden');
     if (picker) picker.classList.add('hidden');
     if (routeShareButton) routeShareButton.classList.add('invisible', 'pointer-events-none');
+    if (walkin) {
+        walkin.classList.add('hidden');
+        walkin.style.display = 'none';
+    }
 
     // 2. Conditional visibility based on tabName
     if (tabName === 'invoices') {
         invoices.classList.remove('hidden');
-        renderInvoices();
+        initializeInvoiceMonthPicker();
     }
     else if (tabName === 'calendar') {
         const calendar = document.getElementById('calendarScreen');
@@ -1020,6 +1758,10 @@ async function showTab(tabName) {
         if (addBtn) addBtn.classList.remove('hidden');
         if (picker) picker.classList.remove('hidden');
         if (routeShareButton) routeShareButton.classList.remove('invisible', 'pointer-events-none');
+        if (walkin) {
+            walkin.classList.remove('hidden');
+            walkin.style.display = 'block';
+        }
         renderList();
     }
 
@@ -1055,79 +1797,6 @@ function updateFooterUI(activeTab) {
         }
     });
 }
-
-async function renderInvoices() {
-    const container = document.getElementById('invoiceListContainer');
-    const picker = document.getElementById('invoiceMonthPicker');
-    if (!picker.value) picker.value = new Date().toISOString().split('T')[0].substring(0, 7);
-
-    const selectedMonth = picker.value;
-    container.innerHTML = '<p class="text-center text-gray-400 py-10 uppercase text-[10px] font-bold tracking-widest">Loading Monthly Totals...</p>';
-
-    const customers = await db.customers.toArray();
-    const attendance = await db.attendance.where('date').startsWith(selectedMonth).toArray();
-
-    // --- HOLIDAY LOGIC FOR THRESHOLD ---
-    const holidayData = await db.settings.get('holidayList');
-    const dynamicHolidays = holidayData ? holidayData.value : [];
-    const [year, month] = selectedMonth.split('-').map(Number);
-    const daysInMonth = new Date(year, month, 0).getDate();
-    let workingDaysCount = 0;
-    for (let d = 1; d <= daysInMonth; d++) {
-        const dateStr = `${selectedMonth}-${String(d).padStart(2, '0')}`;
-        const dateObj = new Date(year, month - 1, d);
-        if (dateObj.getDay() !== 0 && !dynamicHolidays.includes(dateStr)) workingDaysCount++;
-    }
-    const threshold = workingDaysCount * 0.8;
-
-    container.innerHTML = '';
-    let grandTotal = 0;
-
-    customers.forEach(cust => {
-
-        const records = attendance.filter(a => a.custId === cust.id && a.status === 'delivered');
-        if (records.length === 0) return;
-
-        const saladCount = records.length;
-        const addonCount = records.reduce((sum, r) => sum + (r.addons || 0), 0);
-
-        // --- LOGIC FROM generateCustomerInvoice ---
-        // If salads < 70% of working days, use WalkIn price. Else use Plan price/26.
-        const unitPrice = (saladCount >= threshold)
-            ? (PRICES[cust.plan] || 5000) / 26
-            : (cust.plan === 'Regular' ? (PRICES.WalkIn || 200) : 250);
-
-        const sub_total = (saladCount * unitPrice) + (addonCount * 100);
-        const total = sub_total * (1 - (cust.discount || 0) / 100);
-
-        grandTotal += total;
-
-        const card = document.createElement('div');
-        card.className = "bg-white p-5 rounded-3xl shadow-sm border border-gray-100 flex justify-between items-center active:scale-95 transition-transform";
-        card.onclick = () => generateCustomerInvoice(cust.id, selectedMonth);
-
-        card.innerHTML = `
-            <div>
-                <h3 class="font-black text-gray-800 uppercase text-sm tracking-tight">${cust.nickname || cust.name}</h3>
-                <p class="text-[10px] text-gray-400 font-bold uppercase">
-                    ${saladCount} Delivered • ${addonCount} Add-ons</p>
-            </div>
-            <div class="text-right">
-                <p class="text-xl font-black text-green-700 leading-none">₹${Math.round(total).toLocaleString('en-IN')}</p>
-                <p class="text-[8px] text-gray-400 font-black uppercase mt-1 tracking-tighter">Tap for PDF</p>
-            </div>
-        `;
-        container.appendChild(card);
-    });
-
-    const header = document.querySelector('#invoices');
-    if (header) {
-        const formattedGrandTotal = Math.round(grandTotal).toLocaleString('en-IN');
-        header.innerHTML = `Billing Period Total: <span class="ml-2 text-green-600 text-sm font-black">₹${formattedGrandTotal}</span>`;
-    }
-}
-
-
 
 // 3. The Branded PDF Generator (Mimicking Sample)
 async function generateCustomerInvoice(custId, monthYear) {
@@ -1365,63 +2034,83 @@ let syncInterval = null;
 function initAutoSync() {
     const toggle = document.getElementById('autoSyncToggle');
 
-    // 1. Check local storage, but DEFAULT to 'true' if it's the first time
+    // Check if syncToken exists
+    const savedToken = localStorage.getItem('grabb_sync_token');
     const savedPreference = localStorage.getItem('auto_sync_enabled');
-    const isAutoSyncOn = savedPreference === null ? true : savedPreference === 'true';
 
-    // 2. Set the UI state
+    // If no token exists, force auto-sync OFF
+    const isAutoSyncOn = (savedToken && savedToken.trim() !== '') 
+        ? (savedPreference === null ? true : savedPreference === 'true')
+        : false;
+
+    // Set the UI state
     toggle.checked = isAutoSyncOn;
-    localStorage.setItem('auto_sync_enabled', isAutoSyncOn); // Ensure it's stored
+    localStorage.setItem('auto_sync_enabled', isAutoSyncOn);
 
-    // 3. Start timer if enabled
+    // Update token field status
+    updateTokenFieldStatus();
+
+    // Start timer if enabled
     if (isAutoSyncOn) startTimer();
 
-    // 4. Update preference when user toggles
+    // Update preference when user toggles
     toggle.addEventListener('change', (e) => {
         const active = e.target.checked;
         localStorage.setItem('auto_sync_enabled', active);
+        updateTokenFieldStatus();
         if (active) startTimer(); else stopTimer();
     });
 }
 
 function startTimer() {
     if (syncInterval) clearInterval(syncInterval);
-    updateSyncLabel("Active");
+    updateSyncIndicator('active');
 
-    // Immediate attempt on start, then every 15 mins
-    performSilentPush();
+    // Immediate attempt on start, then every 1 min
+    performSmartPush();
 
-    syncInterval = setInterval(performSilentPush, 1 * 60 * 1000);
+    syncInterval = setInterval(performSmartPush, 1 * 60 * 1000);
 }
 
-async function performSilentPush() {
+async function performSmartPush() {
     const token = localStorage.getItem('grabb_sync_token');
     const isEnabled = localStorage.getItem('auto_sync_enabled') === 'true';
 
     if (!token || !isEnabled) return;
 
+    const now = new Date();
+    const lastHardPushTime = parseInt(localStorage.getItem('lastHardPush')) || 0;
+    const timeSinceLastHardPush = now.getTime() - lastHardPushTime;
+    const shouldHardPush = timeSinceLastHardPush > 15 * 60 * 1000; // 15 minutes
+
+    // Skip if no changes AND not time for hard push
+    if (!hasPendingChanges && !shouldHardPush) {
+        updateSyncIndicator('synced');
+        return;
+    }
+
     try {
+        updateSyncIndicator('syncing');
+
         const allData = {};
         for (const table of db.tables) {
             allData[table.name] = await table.toArray();
         }
 
-        const now = new Date();
-        const dateSuffix = now.toISOString().split('T')[0]; // e.g., "2026-02-02"
+        const dateSuffix = now.toISOString().split('T')[0];
         const timestamp = now.toISOString();
 
-        // 1. Update the LIVE document (Always happens)
+        // 1. Update the LIVE document
         await fs.collection('sync_groups').doc(token).set({
             lastUpdated: timestamp,
             deviceInfo: navigator.userAgent.substring(0, 20),
             data: allData
         }, { merge: true });
 
-        // 2. DAILY SNAPSHOT LOGIC with LocalStorage Guard
+        // 2. DAILY SNAPSHOT LOGIC
         const lastSnapshotDate = localStorage.getItem('last_snapshot_date');
 
         if (lastSnapshotDate !== dateSuffix) {
-            // Only now do we talk to the cloud to double-check/upload
             const dailyToken = `${token}_${dateSuffix}`;
             const dailyDocRef = fs.collection('sync_groups').doc(dailyToken);
             const dailyDoc = await dailyDocRef.get();
@@ -1435,19 +2124,20 @@ async function performSilentPush() {
                     lastUpdated: timestamp,
                     data: allData
                 });
-
-                // Run Retention Logic (Deletes old backups)
                 await runRetentionLogic(token);
             }
 
-            // Mark as done locally so we don't 'get()' again today
             localStorage.setItem('last_snapshot_date', dateSuffix);
         }
 
-        updateSyncLabel("Synced");
+        // Clear pending and update hard push time
+        hasPendingChanges = false;
+        localStorage.setItem('lastHardPush', now.getTime().toString());
+
+        updateSyncIndicator('synced');
     } catch (e) {
         console.warn("Auto-sync failed:", e);
-        updateSyncLabel("Waiting for Connection");
+        updateSyncIndicator('error');
     }
 }
 
@@ -1472,18 +2162,30 @@ async function runRetentionLogic(token) {
 }
 
 
-function updateSyncLabel(status) {
+function updateSyncIndicator(state) {
     const label = document.getElementById('syncStatusLabel');
-    if (label) {
-        const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        label.innerText = `Status: ${status} (${time})`;
-    }
+    if (!label) return;
+    
+    const dot = state === 'synced' ? '🟢' : 
+                state === 'pending' ? '🟡' : 
+                state === 'syncing' ? '🔄' : 
+                state === 'active' ? '🟢' :
+                state === 'error' ? '🔴' : '⚪';
+    
+    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const statusText = state === 'active' ? 'Active' : 
+                      state === 'synced' ? 'Synced' : 
+                      state === 'pending' ? 'Pending' : 
+                      state === 'syncing' ? 'Syncing...' : 
+                      state === 'error' ? 'Error' : 'Disabled';
+    
+    label.innerText = `${dot} Status: ${statusText} (${time})`;
 }
 
 function stopTimer() {
     clearInterval(syncInterval);
     syncInterval = null;
-    updateSyncLabel("Disabled");
+    updateSyncIndicator('disabled');
 }
 
 // Ensure the token itself is also persistent
@@ -1642,7 +2344,7 @@ async function openRouteShareSelector() {
 
 async function processRouteShare(route) {
     const dateInput = document.getElementById('dateJump');
-    const date = dateInput ? dateInput.value : new Date().toISOString().split('T')[0];
+    const date = dateInput?.value || new Date().toISOString().split('T')[0];
 
     const attendance = await db.attendance.where('date').equals(date).toArray();
 
@@ -1669,7 +2371,8 @@ async function processRouteShare(route) {
 
     let message = `🚚 *ROUTE: ${route.toUpperCase()}*\n📅 DATE: ${date}\n━━━━━━━━━━━━━━━━━━\n`;
 
-    let totalSalads = 0, totalPremium = 0, totalAddons = 0;
+    let totalSalads = 0, totalPremium = 0, totalAddonCount = 0;
+    const allUniqueAddonCodes = new Set();
 
     activeDeliveries.forEach((item, index) => {
         const { cust, record } = item;
@@ -1677,17 +2380,47 @@ async function processRouteShare(route) {
         const name = cust.nickname || cust.name;
 
         const typeLabel = isPremium ? " (PREMIUM)" : " (Reg)";
-        const addonLabel = record.addons > 0 ? ` +${record.addons} Addon` : "";
+
+        // Collect all addon codes
+        const allAddonCodes = [];
+        if (record.addon) allAddonCodes.push(record.addon);
+        if (record.coupleAddon1) allAddonCodes.push(record.coupleAddon1);
+        if (record.coupleAddon2) allAddonCodes.push(record.coupleAddon2);
+        if (record.extraAddons && Array.isArray(record.extraAddons)) {
+            record.extraAddons.forEach(ea => allAddonCodes.push(ea));
+        }
+
+        // Count occurrences
+        const addonCounts = {};
+        allAddonCodes.forEach(code => {
+            addonCounts[code] = (addonCounts[code] || 0) + 1;
+            allUniqueAddonCodes.add(code);
+        });
+
+        // Format with multipliers
+        const formattedAddons = Object.entries(addonCounts).map(([code, count]) => {
+            return count > 1 ? `${count}${code}` : code;
+        });
+        const addonDisplay = formattedAddons.length > 0 ? ` [${formattedAddons.join(", ")}]` : "";
 
         if (isPremium) totalPremium++; else totalSalads++;
-        totalAddons += (record.addons || 0);
+        totalAddonCount += allAddonCodes.length;
 
-        message += `${index + 1}. *${name}*${typeLabel}${addonLabel}\n`;
+        message += `${index + 1}. *${name}*${typeLabel}${addonDisplay}\n`;
     });
 
     message += `━━━━━━━━━━━━━━━━━━\n`;
-    message += `📊 Regular: ${totalSalads} | Prem: ${totalPremium}${totalAddons > 0 ? ` | Addons: ${totalAddons}` : ''}\n`;
+    message += `📊 Regular: ${totalSalads} | Prem: ${totalPremium}${totalAddonCount > 0 ? ` | Addons: ${totalAddonCount}` : ''}\n`;
     message += `📦 *Total: ${activeDeliveries.length}*`;
+
+    // Add addon reference section
+    if (allUniqueAddonCodes.size > 0) {
+        message += `\n\n*Addons:*\n`;
+        allUniqueAddonCodes.forEach(code => {
+            const fullName = ADDON_OPTIONS[code] || code;
+            message += `${code} = ${fullName}\n`;
+        });
+    }
 
     document.getElementById('routeShareModal').classList.add('hidden');
     window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`, '_blank');
@@ -1717,137 +2450,15 @@ async function hardRefreshApp() {
 
         // 3. Force reload from server with a cache-busting timestamp
         const timestamp = Date.now();
-        window.location.href = window.location.href + '?reload=' + timestamp;
+        // Clear existing query params first to avoid accumulating timestamps
+        const baseUrl = window.location.protocol + '//' + window.location.host + window.location.pathname;
+        window.location.href = baseUrl + '?reload=' + timestamp;
 
     } catch (error) {
         console.error("Hard refresh failed:", error);
         // Fallback: simple reload
         window.location.reload(true);
     }
-}
-
-let currentDisplayDate = new Date();
-async function renderCalendar() {
-    const grid = document.getElementById('calendarGrid');
-    const label = document.getElementById('currentMonthYear');
-    const customerSelector = document.getElementById('calendarCustomerSelector');
-
-    if (!customerSelector) return;
-    const customerId = isNaN(customerSelector.value) ? customerSelector.value : Number(customerSelector.value);
-
-    grid.innerHTML = '';
-    const year = currentDisplayDate.getFullYear();
-    const month = currentDisplayDate.getMonth();
-    const monthPrefix = `${year}-${String(month + 1).padStart(2, '0')}`;
-
-    // 1. Update Month/Year Header
-    if (label) {
-        label.innerText = new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(currentDisplayDate);
-    }
-    // 2. Fetch Data: Attendance + Holiday List from Settings
-    const [attendanceRecords, holidayData] = await Promise.all([
-        db.attendance.where('custId').equals(customerId).filter(r => r.date.startsWith(monthPrefix)).toArray(),
-        db.settings.get('holidayList')
-    ]);
-    const dynamicHolidays = holidayData ? holidayData.value : [];
-
-    // 3. Map Attendance for lookup
-    const dayMap = {};
-    attendanceRecords.forEach(rec => {
-        // 1. Extract day from date string 'YYYY-MM-DD'
-        const day = parseInt(rec.date.split('-')[2]);
-        // 2. Add-on Logic: Check if the 'addons' field exists and has content
-        // This handles both arrays and simple truthy checks
-        const hasAddon = Array.isArray(rec.addons)
-            ? rec.addons.length > 0
-            : !!rec.addons;
-
-        // 3. Status Logic: Priority to Vacation, then the saved status
-        let finalStatus = rec.status;
-        if (rec.isVacation) {
-            finalStatus = 'Skipped';
-        }
-        // 4. Map to object for the loop
-        dayMap[day] = {
-            status: finalStatus, // 'delivered' or 'skipped'
-            hasAddon: hasAddon
-        };
-    });
-
-    // 4. Grid Generation
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const firstDay = new Date(year, month, 1).getDay();
-    const offset = firstDay === 0 ? 6 : firstDay - 1; // Monday start
-    
-    for (let i = 0; i < offset; i++) grid.innerHTML += `<div></div>`;
-
-    for (let day = 1; day <= daysInMonth; day++) {
-        const dateObj = new Date(year, month, day);
-        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        const dayOfWeek = dateObj.getDay();
-
-        const data = dayMap[day];
-        const isToday = new Date().toDateString() === dateObj.toDateString();
-        const isSunday = dayOfWeek === 0;
-        const isHoliday = dynamicHolidays.includes(dateStr);
-        // --- COLOR LOGIC ---
-        let bgColor = "bg-white";
-        let textColor = "text-gray-600";
-        let dotsHtml = "";
-
-        // Background Priority: Holiday (Cyan) > Sunday (Amber)
-        if (isHoliday) {
-            bgColor = "bg-cyan-100";
-            textColor = "text-cyan-800";
-        } else if (isSunday) {
-            bgColor = "bg-amber-100";
-            textColor = "text-amber-800";
-        }
-
-        if (data) {
-
-            // Apply Status Backgrounds only if it's a "normal" day
-            if (data.status === 'delivered') {
-                if (!isSunday && !isHoliday) bgColor = "bg-green-50";
-                dotsHtml += '<div class="w-1.5 h-1.5 bg-green-500 rounded-full"></div>';
-                textColor = "text-green-700 font-black";
-            } else if (data.status.toLowerCase() === 'skipped') {
-                if (!isSunday && !isHoliday) bgColor = "bg-red-50";
-                dotsHtml += '<div class="w-1.5 h-1.5 bg-red-400 rounded-full"></div>';
-                textColor = "text-red-700 font-black";
-            }
-
-            // Addon Dot (Blue)
-            if (data.hasAddon) {
-                dotsHtml += '<div class="w-1.5 h-1.5 bg-blue-500 rounded-full"></div>';
-            }
-        }
-
-        grid.innerHTML += `
-            <div class="aspect-square ${bgColor} rounded-2xl border border-gray-100 flex flex-col items-center justify-center relative ${isToday ? 'ring-2 ring-blue-500 shadow-md z-10' : ''}">
-                <span class="text-xs font-black ${textColor}">${day}</span>
-                <div class="flex gap-0.5 mt-1">${dotsHtml}</div>
-            </div>
-        `;
-    }
-}
-
-
-
-async function populateCalendarCustomerDropdown() {
-    const selector = document.getElementById('calendarCustomerSelector');
-    if (!selector) return;
-
-    const customers = await db.customers.toArray(); // Fetch from your Dexie table
-
-    selector.innerHTML = customers.map(c =>
-        `<option value="${c.id}">${c.name}</option>`
-    ).join('');
-}
-
-function changeMonth(step) {
-    currentDisplayDate.setMonth(currentDisplayDate.getMonth() + step);
-    renderCalendar();
 }
 
 async function toggleAutoSync() {
@@ -1871,12 +2482,13 @@ async function toggleAutoSync() {
             return;
         }
         
-        updateSyncLabel("Syncing...");
-        await performSilentPush();
+        updateSyncIndicator('syncing');
+        await performSmartPush();
     } else {
-        updateSyncLabel("Sync Disabled");
+        updateSyncIndicator('disabled');
     }
 }
+
 function updateTokenFieldStatus() {
     const tokenInput = document.getElementById('syncToken');
     const isEnabled = localStorage.getItem('auto_sync_enabled') === 'true';
@@ -1892,6 +2504,280 @@ function updateTokenFieldStatus() {
 }
 
 // Call this on page load
-document.addEventListener('DOMContentLoaded', updateTokenFieldStatus);
+document.addEventListener('DOMContentLoaded', () => {
+    updateTokenFieldStatus();
+    
+    // Setup account status toggle listener
+    const statusToggle = document.getElementById('editStatusToggle');
+    if (statusToggle) {
+        statusToggle.addEventListener('change', function() {
+            const statusText = document.getElementById('editStatusText');
+            if (this.checked) {
+                statusText.textContent = 'Active';
+                statusText.className = 'text-sm font-bold text-green-600';
+            } else {
+                statusText.textContent = 'Inactive';
+                statusText.className = 'text-sm font-bold text-red-600';
+            }
+        });
+    }
+});
 
-init();
+// Daily Addon Selection System
+let selectedDailyAddonTypes = [];
+
+// Wait for DOM to be fully loaded before initializing
+document.addEventListener('DOMContentLoaded', function() {
+    init();
+});
+
+async function openDailyAddonSelector() {
+    // Check if addons already selected for today
+    const today = getToday();
+    const existingAddons = getTodaySelectedAddons();
+    
+    // Get yesterday's addons for pre-selection if nothing selected today
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+    const yesterdayAddonsStr = localStorage.getItem(`dailyAddons_${yesterdayStr}`);
+    const yesterdayAddons = yesterdayAddonsStr ? JSON.parse(yesterdayAddonsStr) : null;
+    
+    if (existingAddons && existingAddons.length > 0) {
+        selectedDailyAddonTypes = [...existingAddons];
+    } else if (yesterdayAddons && yesterdayAddons.length > 0) {
+        // Pre-select yesterday's addons
+        selectedDailyAddonTypes = [...yesterdayAddons];
+    } else {
+        selectedDailyAddonTypes = [];
+    }
+    
+    const enforceSetting = localStorage.getItem('enforceDailyAddons');
+    const enforceDailyAddons = enforceSetting !== 'false';
+    
+    const modalHtml = `
+        <div id="dailyAddonSelector" class="fixed inset-0 z-[300] bg-white flex flex-col">
+            <div class="flex-1 flex flex-col items-center justify-center p-6">
+                <h2 class="text-2xl font-black text-gray-800 mb-2">Daily Addons Selection</h2>
+                <p class="text-gray-500 mb-2 text-center">${existingAddons && existingAddons.length > 0 ? 'Currently selected addons for today:' : 'Select addon types for today'}</p>
+                <p class="text-gray-400 text-xs mb-6 text-center">Cancel = yesterday's addons, if not available random 3</p>
+                
+                <div class="grid grid-cols-3 gap-4 w-full max-w-sm mb-8">
+                    ${FREE_ADDON_OPTIONS.map(addon => `
+                        <button onclick="toggleDailyAddonSelection('${addon}')" 
+                            id="daily-addon-${addon}"
+                            class="p-4 rounded-xl border-2 border-gray-200 font-bold text-lg transition-all ${selectedDailyAddonTypes.includes(addon) ? 'bg-blue-500 border-blue-500 text-white' : ''}">
+                            ${addon}
+                        </button>
+                    `).join('')}
+                </div>
+                
+                <div class="flex gap-3 w-full max-w-sm">
+                    <button onclick="cancelDailyAddonsSelection()" 
+                        class="flex-1 bg-gray-200 text-gray-700 py-4 rounded-xl font-bold text-lg transition-all hover:bg-gray-300">
+                        Cancel
+                    </button>
+                    <button id="confirmDailyAddonsBtn" onclick="saveDailyAddonsSelection()" 
+                        class="flex-1 ${selectedDailyAddonTypes.length > 0 ? 'bg-blue-600' : 'bg-gray-300'} text-white py-4 rounded-xl font-bold text-lg transition-all" 
+                        ${selectedDailyAddonTypes.length > 0 ? '' : 'disabled'}>
+                        ${existingAddons && existingAddons.length > 0 ? 'Update' : 'Confirm'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Remove existing modal if any
+    const existingModal = document.getElementById('dailyAddonSelector');
+    if (existingModal) existingModal.remove();
+    
+    // Add modal to body
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = modalHtml;
+    document.body.appendChild(tempDiv.firstElementChild);
+}
+
+function toggleDailyAddonSelection(addon) {
+    const btn = document.getElementById(`daily-addon-${addon}`);
+    const index = selectedDailyAddonTypes.indexOf(addon);
+    
+    if (index > -1) {
+        // Deselect
+        selectedDailyAddonTypes.splice(index, 1);
+        btn.classList.remove('bg-blue-500', 'border-blue-500', 'text-white');
+        btn.classList.add('border-gray-200');
+    } else {
+        // Select (allow any number, validation on confirm)
+        selectedDailyAddonTypes.push(addon);
+        btn.classList.add('bg-blue-500', 'border-blue-500', 'text-white');
+        btn.classList.remove('border-gray-200');
+    }
+    
+    // Update confirm button - enable if at least 1 addon selected
+    const confirmBtn = document.getElementById('confirmDailyAddonsBtn');
+    if (selectedDailyAddonTypes.length > 0) {
+        confirmBtn.disabled = false;
+        confirmBtn.classList.remove('bg-gray-300');
+        confirmBtn.classList.add('bg-blue-600');
+    } else {
+        confirmBtn.disabled = true;
+        confirmBtn.classList.add('bg-gray-300');
+        confirmBtn.classList.remove('bg-blue-600');
+    }
+}
+
+async function saveDailyAddonsSelection() {
+    // Validate: must have at least 1 addon
+    if (selectedDailyAddonTypes.length === 0) {
+        alert('Please select at least 1 addon type');
+        return;
+    }
+    
+    const today = getToday();
+    localStorage.setItem(`dailyAddons_${today}`, JSON.stringify(selectedDailyAddonTypes));
+    
+    window.selectedDailyAddons = selectedDailyAddonTypes;
+    
+    // Assign addons to premium customers immediately
+    await assignDailyAddonsToPremium();
+    
+    // Remove modal
+    const modal = document.getElementById('dailyAddonSelector');
+    if (modal) modal.remove();
+    
+    // Continue with init
+    await init();
+}
+
+async function cancelDailyAddonsSelection() {
+    const today = getToday();
+    const existingAddons = getTodaySelectedAddons();
+    
+    // Remove modal
+    const modal = document.getElementById('dailyAddonSelector');
+    if (modal) modal.remove();
+    
+    if (!existingAddons || existingAddons.length === 0) {
+        // No addons selected yet - try yesterday's first, then random
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().split('T')[0];
+        const yesterdayAddons = localStorage.getItem(`dailyAddons_${yesterdayStr}`);
+        
+        let fallbackAddons;
+        let message;
+        
+        if (yesterdayAddons) {
+            // Use yesterday's addons
+            fallbackAddons = JSON.parse(yesterdayAddons);
+            message = 'Yesterday\'s addons assigned: ' + fallbackAddons.join(', ');
+        } else {
+            // Fallback to random 3
+            const shuffled = [...FREE_ADDON_OPTIONS].sort(() => 0.5 - Math.random());
+            fallbackAddons = shuffled.slice(0, 3);
+            message = 'Random addons assigned: ' + fallbackAddons.join(', ');
+        }
+        
+        selectedDailyAddonTypes = fallbackAddons;
+        localStorage.setItem(`dailyAddons_${today}`, JSON.stringify(fallbackAddons));
+        window.selectedDailyAddons = fallbackAddons;
+        
+        // Assign addons to premium customers
+        await assignDailyAddonsToPremium();
+        
+        showUndo(message);
+    }
+    
+    // Continue with init
+    await init();
+}
+
+// Function to get today's selected addons
+function getTodaySelectedAddons() {
+    const today = getToday();
+    const stored = localStorage.getItem(`dailyAddons_${today}`);
+    return stored ? JSON.parse(stored) : null;
+}
+
+// Settings toggle for enforcement
+function toggleEnforceDailyAddons() {
+    const current = localStorage.getItem('enforceDailyAddons');
+    const newValue = current !== 'false'; // Default to true
+    localStorage.setItem('enforceDailyAddons', (!newValue).toString());
+    return !newValue;
+}
+
+// Assign addons to premium customers based on selected types
+async function assignDailyAddonsToPremium() {
+    const selectedAddons = window.selectedDailyAddons || getTodaySelectedAddons();
+    if (!selectedAddons || selectedAddons.length === 0) return;
+    
+    const today = getToday();
+    const customers = await db.customers.toArray();
+    const premiumCustomers = customers.filter(c => 
+        c.plan && c.plan.toLowerCase().includes('premium') && 
+        c.status !== 'inactive'
+    );
+    
+    // Assign addons round-robin based on number of selected addons
+    premiumCustomers.forEach((cust, index) => {
+        const addonIndex = index % selectedAddons.length;
+        const assignedAddon = selectedAddons[addonIndex];
+        pendingAddons.set(cust.id, assignedAddon);
+        localStorage.setItem(`addon_${cust.id}`, assignedAddon);
+    });
+}
+
+// Toggle display for enforce daily addons setting
+async function toggleEnforceDailyAddonsDisplay() {
+    const newValue = await toggleEnforceDailyAddons();
+    showUndo(newValue ? "Daily addon enforcement ON" : "Daily addon enforcement OFF");
+}
+
+// Load toggle state when settings opens
+function loadEnforceDailyAddonsToggle() {
+    const setting = localStorage.getItem('enforceDailyAddons');
+    const isEnabled = setting === 'true'; // Default to false (OFF)
+    const toggle = document.getElementById('enforceDailyAddonsToggle');
+    if (toggle) toggle.checked = isEnabled;
+}
+
+// Initialize toggle state on page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Small delay to ensure DOM is ready
+    setTimeout(() => {
+        loadEnforceDailyAddonsToggle();
+    }, 100);
+});
+
+// Debug: Verify settings drawer elements exist
+function verifySettingsElements() {
+    const toggle = document.getElementById('enforceDailyAddonsToggle');
+    const changeBtn = document.getElementById('changeDailyAddonsBtn');
+    const drawer = document.getElementById('settingsDrawer');
+    
+    console.log('=== Settings Debug ===');
+    console.log('Drawer exists:', !!drawer);
+    console.log('Toggle exists:', !!toggle);
+    console.log('Change button exists:', !!changeBtn);
+    
+    if (drawer) {
+        console.log('Drawer display:', drawer.style.display);
+        console.log('Drawer hidden class:', drawer.classList.contains('hidden'));
+    }
+    
+    if (toggle) {
+        console.log('Toggle display:', window.getComputedStyle(toggle).display);
+        console.log('Toggle visibility:', window.getComputedStyle(toggle).visibility);
+    }
+    
+    if (changeBtn) {
+        console.log('ChangeBtn display:', window.getComputedStyle(changeBtn).display);
+        console.log('ChangeBtn visibility:', window.getComputedStyle(changeBtn).visibility);
+    }
+}
+
+// Run verification after page load
+document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(verifySettingsElements, 1000);
+});

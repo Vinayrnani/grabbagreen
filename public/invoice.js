@@ -406,16 +406,14 @@ async function generateInvoicePDF(invoiceId) {
     return doc;
 }
 
-// WhatsApp Share
-async function shareInvoiceViaWhatsApp(invoiceId) {
+// Helper function to build invoice message
+async function buildInvoiceMessage(invoiceId) {
     const invoice = await db.invoices.get(invoiceId);
     const cust = await db.customers.get(invoice.custId);
-    const items = await db.invoiceItems.where({invoiceId}).toArray();
     const adjustments = await db.invoiceAdjustments.where({invoiceId}).toArray();
     const monthName = new Date(invoice.monthYear + '-01').toLocaleString('default', { month: 'long' });
     const year = invoice.monthYear.split('-')[0];
     
-    // Calculate in paise to avoid floating-point errors (same as PDF)
     const itemsTotalPaise = Math.round(invoice.subTotal * 100);
     const discountPaise = Math.round(invoice.discountAmount * 100);
     const adjustmentsPaise = adjustments.reduce((sum, adj) => {
@@ -425,7 +423,7 @@ async function shareInvoiceViaWhatsApp(invoiceId) {
     const roundedAmountPaise = Math.round(subtotalAfterPaise / 100) * 100;
     const roundedTotal = roundedAmountPaise / 100;
     
-    const message = `Hi ${cust.nickname || cust.name},
+    return `Hi ${cust.nickname || cust.name},
 
 Your invoice #${invoice.invoiceNumber} for ${monthName} ${year}
 Total: Rs. ${formatINR(roundedTotal)}
@@ -433,22 +431,57 @@ Total: Rs. ${formatINR(roundedTotal)}
 💳 Pay here: upi://pay?pa=9346379970@ibl&pn=GrabbAGreen&am=${Math.round(roundedTotal)}&tn=${invoice.invoiceNumber}&cu=INR
 
 PDF attached. Thank you!`;
+}
+
+// Share Text via WhatsApp
+async function shareInvoiceText(invoiceId) {
+    const message = await buildInvoiceMessage(invoiceId);
+    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+    window.open(whatsappUrl, '_blank');
     
+    await db.invoices.update(invoiceId, { textShared: true });
+    
+    const invoice = await db.invoices.get(invoiceId);
+    if (invoice.pdfShared) {
+        await markInvoiceSent(invoiceId);
+    }
+    
+    openInvoiceDetail(invoiceId);
+}
+
+// Share PDF via Native Share
+async function shareInvoicePDF(invoiceId) {
     const doc = await generateInvoicePDF(invoiceId);
     const pdfBlob = doc.output('blob');
-    const file = new File([pdfBlob], `Invoice_${invoice.invoiceNumber}.pdf`, { type: 'application/pdf' });
+    const invoice = await db.invoices.get(invoiceId);
+    const cust = await db.customers.get(invoice.custId);
+    const customerName = cust.name || cust.nickname;
+    const fileName = `${customerName}_Invoice_${invoice.invoiceNumber}.pdf`;
+    const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
     
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
         try {
-            await navigator.share({ files: [file], title: `Invoice ${invoice.invoiceNumber}`, text: message });
-            await markInvoiceSent(invoiceId);
+            await navigator.share({ files: [file], title: `Invoice ${invoice.invoiceNumber}` });
+            await db.invoices.update(invoiceId, { pdfShared: true });
+            
+            const updatedInvoice = await db.invoices.get(invoiceId);
+            if (updatedInvoice.textShared) {
+                await markInvoiceSent(invoiceId);
+            }
         } catch (err) {
-            // User canceled or share failed - download PDF
-            doc.save(`Invoice_${invoice.invoiceNumber}.pdf`);
+            console.log('PDF share cancelled or failed');
         }
     } else {
-        doc.save(`Invoice_${invoice.invoiceNumber}.pdf`);
+        doc.save(fileName);
     }
+    
+    openInvoiceDetail(invoiceId);
+}
+
+// Legacy function - now shows dropdown
+async function shareInvoiceViaWhatsApp(invoiceId) {
+    // This function is kept for backward compatibility
+    // The UI now calls shareInvoiceText or shareInvoicePDF directly
 }
 
 // UI Render Functions
@@ -600,6 +633,7 @@ async function openInvoiceDetail(invoiceId) {
     }
     
     document.getElementById('invoiceDetailModal').classList.remove('hidden');
+    updateShareCheckmarks();
 }
 
 function closeInvoiceDetailModal() {
@@ -676,9 +710,48 @@ async function markCurrentInvoiceSent() {
     openInvoiceDetail(currentInvoiceId);
 }
 
+function toggleShareDropdown() {
+    const dropdown = document.getElementById('shareDropdown');
+    dropdown.classList.toggle('hidden');
+    
+    if (!dropdown.classList.contains('hidden')) {
+        updateShareCheckmarks();
+    }
+}
+
+async function updateShareCheckmarks() {
+    if (!currentInvoiceId) return;
+    
+    const invoice = await db.invoices.get(currentInvoiceId);
+    const textCheck = document.getElementById('textSharedCheck');
+    const pdfCheck = document.getElementById('pdfSharedCheck');
+    
+    if (invoice.textShared) {
+        textCheck.classList.remove('hidden');
+    } else {
+        textCheck.classList.add('hidden');
+    }
+    
+    if (invoice.pdfShared) {
+        pdfCheck.classList.remove('hidden');
+    } else {
+        pdfCheck.classList.add('hidden');
+    }
+}
+
+async function handleShareOption(option) {
+    document.getElementById('shareDropdown').classList.add('hidden');
+    
+    if (option === 'text') {
+        await shareInvoiceText(currentInvoiceId);
+    } else if (option === 'pdf') {
+        await shareInvoicePDF(currentInvoiceId);
+    }
+}
+
+// Legacy function - no longer used
 async function shareCurrentInvoice() {
-    await shareInvoiceViaWhatsApp(currentInvoiceId);
-    openInvoiceDetail(currentInvoiceId);
+    await shareInvoiceText(currentInvoiceId);
 }
 
 async function calculateWorkingDays(monthYear) {

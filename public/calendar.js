@@ -111,14 +111,35 @@ async function populateCalendarCustomerDropdown() {
     const selector = document.getElementById('calendarCustomerSelector');
     if (!selector) return;
 
-    const customers = await db.customers.toArray(); // Fetch from your Dexie table
+    const year = currentDisplayDate.getFullYear();
+    const month = currentDisplayDate.getMonth();
+    const monthPrefix = `${year}-${String(month + 1).padStart(2, '0')}`;
 
-    selector.innerHTML = customers.map(c =>
+    const customersWithRecords = await db.attendance
+        .where('date')
+        .startsWith(monthPrefix)
+        .toArray();
+    
+    const customerIdsWithRecords = [...new Set(customersWithRecords.map(r => r.custId))];
+    
+    const allCustomers = await db.customers.toArray();
+
+    let filteredCustomers = allCustomers.filter(c => {
+        if (c.status !== 'inactive') return true;
+        return customerIdsWithRecords.includes(c.id);
+    });
+
+    if (filteredCustomers.length === 0) {
+        filteredCustomers = allCustomers.filter(c => c.status !== 'inactive');
+    }
+
+    selector.innerHTML = filteredCustomers.map(c =>
         `<option value="${c.id}">${c.name}</option>`
     ).join('');
 }
 
 function changeMonth(step) {
     currentDisplayDate.setMonth(currentDisplayDate.getMonth() + step);
+    populateCalendarCustomerDropdown();
     renderCalendar();
 }

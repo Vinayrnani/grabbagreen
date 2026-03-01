@@ -3,7 +3,7 @@ always read the requirements.md file to understand the prompt better
 do only minimal requried changes
 if you are not confident about the prompt and changes you are making or not clear on the requiremnt ask for explainations or confirmations
 if the change requires other items to be changed get a confirmation
-keep updating the requirements.md file with key information.
+keep updating the requirements.md file with key information or new requirements.
 read the chat.md to get the context if you loose or doesnt have any historical context
 you MUST follow all these instructions for every prmompt
 UUU when you see this pattern on the prompt, which means you forgot reading the instructions and updating the chat.md file

@@ -436,8 +436,33 @@ PDF attached. Thank you!`;
 // Share Text via WhatsApp
 async function shareInvoiceText(invoiceId) {
     const message = await buildInvoiceMessage(invoiceId);
+    
+    // Try native share first (works on mobile Safari/Chrome), fallback to wa.me redirect
+    if (navigator.share) {
+        try {
+            await navigator.share({
+                title: 'Invoice',
+                text: message
+            });
+            await db.invoices.update(invoiceId, { textShared: true });
+            
+            const invoice = await db.invoices.get(invoiceId);
+            if (invoice.pdfShared) {
+                await markInvoiceSent(invoiceId);
+            }
+            
+            openInvoiceDetail(invoiceId);
+            return;
+        } catch (err) {
+            if (err.name !== 'AbortError') {
+                console.log('Share cancelled or failed:', err);
+            }
+        }
+    }
+    
+    // Fallback: Use wa.me redirect (works on all browsers)
     const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
-    window.open(whatsappUrl, '_blank');
+    window.location.assign(whatsappUrl);
     
     await db.invoices.update(invoiceId, { textShared: true });
     

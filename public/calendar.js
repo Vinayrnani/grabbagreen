@@ -138,8 +138,8 @@ async function populateCalendarCustomerDropdown() {
     ).join('');
 }
 
-function changeMonth(step) {
+async function changeMonth(step) {
     currentDisplayDate.setMonth(currentDisplayDate.getMonth() + step);
-    populateCalendarCustomerDropdown();
+    await populateCalendarCustomerDropdown();
     renderCalendar();
 }

@@ -74,54 +74,18 @@ async function addInvoiceLineItems(invoiceId, records, cust, monthYear) {
     const workingDays = await calculateWorkingDays(monthYear);
     const deliveredCount = records.length;
     const isSubscriber = deliveredCount >= (workingDays * 0.8);
-    const fiftyPercent = workingDays * 0.5;
-    const isFiftyPlus = deliveredCount >= fiftyPercent;
-
-    if (cust.plan === 'Couple') {
-        const s1Count = records.filter(r => r.inclusion === 'S1').length;
-        const s2Count = records.filter(r => r.inclusion === 'S2').length;
-        const totalSalads = s1Count + (s2Count * 2);
-
-        let rate;
-        if (isSubscriber && s2Count === deliveredCount) {
-            rate = 8999 / 26 / 2;
-        } else if (isSubscriber && s2Count > s1Count) {
-            rate = 182.67;
-        } else if (isFiftyPlus) {
-            rate = 192.27;
-        } else {
-            rate = 200;
-        }
-
-        await db.invoiceItems.add({
-            invoiceId,
-            type: 'salad',
-            description: 'Salad bowls (Couple)',
-            quantity: totalSalads,
-            unitPrice: rate,
-            amount: totalSalads * rate
-        });
-    } else {
-        let unitPrice;
-        if (cust.plan === 'Regular') {
-            unitPrice = isSubscriber ? 4999 / 26 : 200;
-        } else if (cust.plan === 'Premium') {
-            unitPrice = 6499 / 26;
-        } else if (cust.plan === 'MealBox') {
-            unitPrice = 7800 / 26;
-        } else {
-            unitPrice = isSubscriber ? (PRICES[cust.plan] || 5000) / 26 : 200;
-        }
-
-        await db.invoiceItems.add({
-            invoiceId,
-            type: 'salad',
-            description: `Salad bowls (${cust.plan})`,
-            quantity: deliveredCount,
-            unitPrice: unitPrice,
-            amount: deliveredCount * unitPrice
-        });
-    }
+    const unitPrice = isSubscriber 
+        ? (PRICES[cust.plan] || 5000) / 26 
+        : (cust.plan === 'Regular' ? PRICES.WalkIn : 250);
+    
+    await db.invoiceItems.add({
+        invoiceId,
+        type: 'salad',
+        description: `Salad bowls (${cust.plan})`,
+        quantity: deliveredCount,
+        unitPrice: Math.round(unitPrice),
+        amount: Math.round(deliveredCount * unitPrice)
+    });
     
     const addonCounts = {};
     records.forEach(record => {

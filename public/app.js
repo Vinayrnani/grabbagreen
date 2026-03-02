@@ -365,7 +365,7 @@ function generateCardHTML(cust, todayEntry, attendanceMap, coupleAddonCounts, vi
                 <div class="flex items-center gap-2 py-0.5">
                     <span class="bg-gray-800 text-white text-[10px] px-2 py-0.5 rounded font-bold">${cust.route}</span>
                     <span class="${planColor} text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center shadow-sm">${getPlanAbbreviation(cust.plan)}</span>
-                    <h3 class="font-bold text-xl text-gray-900">${cust.name} ${addonBadge}</h3>
+                    <h3 class="font-bold text-xl text-gray-900">${cust.nickname || cust.name} ${addonBadge}</h3>
                 </div>
                 
                 ${!isOnVacation && !(todayEntry && todayEntry.status === 'skipped') ? `
@@ -754,7 +754,7 @@ async function recordAttendance(custId, status) {
 
         // NEW RULE: Confirmation if skipping with an Add-on
         if (status === 'skipped' && hasPendingAddon) {
-            const confirmSkip = confirm(`Wait! ${customer.nickname} has an Add-on requested. If you skip, the Add-on will be removed for today. Proceed?`);
+            const confirmSkip = confirm(`Wait! ${customer.nickname || customer.name} has an Add-on requested. If you skip, the Add-on will be removed for today. Proceed?`);
             if (!confirmSkip) {
                 isProcessing = false;
                 await renderList(); // Reset the card position
@@ -936,7 +936,7 @@ async function generateInvoice(custId) {
     const perBowlPrice = PRICES[customer.plan] / 26;
     const total = (deliveredCount * perBowlPrice) + (addonsCount * 100);
 
-    alert(`Invoice for ${customer.name}: 
+    alert(`Invoice for ${customer.nickname || customer.name}: 
     Bowls: ${deliveredCount}
     Addons: ${addonsCount}
     Total: ₹${Math.round(total)}`);
@@ -1313,7 +1313,7 @@ async function undoLastAction() {
         doc.setFontSize(22);
         doc.text("SALAD MASTER INVOICE", 20, 20);
         doc.setFontSize(12);
-        doc.text(`Customer: ${cust.name} (${cust.nickname})`, 20, 40);
+        doc.text(`Customer: ${cust.name || cust.nickname}`, 20, 40);
         doc.text(`Route: ${cust.route}`, 20, 50);
         doc.text(`Month: ${monthNames[today.getMonth()]} ${today.getFullYear()}`, 20, 60);
         
@@ -1849,7 +1849,7 @@ async function generateCustomerInvoice(custId, monthYear) {
     doc.text(`Billing: ${monthName} ${year}`, 150, 43);
     doc.text(`To,`, 15, 60);
     doc.setFontSize(14);
-    doc.text(`${cust.name}`, 15, 68);
+    doc.text(`${cust.name || cust.nickname || ''}`, 15, 68);
 
     // CALCULATION (Using the new unitPrice determined above)
     const saladTotal = custData.length * unitPrice;
@@ -1903,7 +1903,7 @@ async function generateCustomerInvoice(custId, monthYear) {
     doc.text("Eat Green, Feel Great.", 105, thankYouY + 5, { align: "center" });
     // --- END THANK YOU NOTE ---
     // 6. Direct WhatsApp Sharing Logic
-    const fileName = `Invoice_${cust.nickname || cust.name}_${monthName}.pdf`;
+    const fileName = `Invoice_${cust.name || cust.nickname}_${monthName}.pdf`;
     const pdfBlob = doc.output('blob');
     const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
 
@@ -2314,7 +2314,7 @@ async function shareRouteList(route, date) {
 
     activeDeliveries.forEach((entry, index) => {
         const cust = customers.find(c => c.id === entry.custId);
-        message += `${index + 1}. *${cust.name}* ${cust.nickname ? `(${cust.nickname})` : ''}\n`;
+        message += `${index + 1}. *${cust.nickname || cust.name}*\n`;
         if (entry.addons > 0) message += `   ➕ Add-ons: ${entry.addons}\n`;
     });
 

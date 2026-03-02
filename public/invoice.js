@@ -345,7 +345,7 @@ async function generateInvoicePDF(invoiceId) {
     doc.text(`Billing: ${monthName} ${year}`, 150, 48);
     doc.text(`To,`, 15, 60);
     doc.setFontSize(14);
-    doc.text(cust.name, 15, 68);
+    doc.text(cust.name || cust.nickname || '', 15, 68);
     
     const tableBody = items.map(item => [
         item.description,
@@ -459,7 +459,7 @@ async function buildInvoiceMessage(invoiceId) {
     const roundedAmountPaise = Math.round(subtotalAfterPaise / 100) * 100;
     const roundedTotal = roundedAmountPaise / 100;
     
-    return `Hi ${cust.nickname || cust.name},
+    return `Hi ${cust.name || cust.nickname},
 
 Your invoice #${invoice.invoiceNumber} for ${monthName} ${year}
 Total: Rs. ${formatINR(roundedTotal)}
@@ -585,7 +585,7 @@ async function renderInvoices() {
         card.innerHTML = `
             <div class="flex justify-between items-start mb-2">
                 <div>
-                    <h3 class="font-black text-gray-800 text-sm">${cust.nickname || cust.name}</h3>
+                    <h3 class="font-black text-gray-800 text-sm">${cust.name || cust.nickname}</h3>
                     <p class="text-[10px] text-gray-400 font-bold">${inv.invoiceNumber}</p>
                 </div>
                 <span class="px-2 py-1 rounded-full text-[10px] font-bold ${statusColor}">
@@ -619,7 +619,7 @@ async function openInvoiceDetail(invoiceId) {
     document.getElementById('detailInvoiceDate').textContent = new Date(invoice.generatedAt).toLocaleDateString();
     document.getElementById('detailInvoiceStatus').textContent = invoice.status.toUpperCase();
     document.getElementById('detailInvoiceStatus').className = `px-3 py-1 rounded-full text-xs font-bold ${INVOICE_STATUS_COLORS[invoice.status]}`;
-    document.getElementById('detailCustomerName').textContent = cust.nickname || cust.name;
+    document.getElementById('detailCustomerName').textContent = cust.name || cust.nickname;
     document.getElementById('detailCustomerPlan').textContent = cust.plan;
     
     const itemsContainer = document.getElementById('detailLineItems');

@@ -20,6 +20,10 @@ const INVOICE_STATUS_COLORS = {
 let currentInvoiceFilter = 'all';
 let currentInvoiceId = null;
 
+function onInvoiceMonthChange() {
+    renderInvoices();
+}
+
 // Indian Currency Format (1,23,456.00)
 function formatINR(amount) {
     return amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -547,6 +551,7 @@ async function shareInvoiceViaWhatsApp(invoiceId) {
 
 // UI Render Functions
 async function renderInvoices() {
+    saveScrollPosition('invoiceListContainer');
     const container = document.getElementById('invoiceListContainer');
     const picker = document.getElementById('invoiceMonthPicker');
     const monthYear = picker.value || new Date().toISOString().slice(0, 7);
@@ -605,6 +610,8 @@ async function renderInvoices() {
     if (filteredInvoices.length === 0) {
         container.innerHTML = '<p class="text-center text-gray-400 py-10">No invoices found. Click Generate Invoices.</p>';
     }
+    
+    restoreScrollPosition('invoiceListContainer');
 }
 
 async function openInvoiceDetail(invoiceId) {

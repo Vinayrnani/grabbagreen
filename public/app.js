@@ -28,6 +28,24 @@ db.invoiceItems?.hook('creating', () => { hasPendingChanges = true; updateSyncIn
 db.invoiceItems?.hook('updating', () => { hasPendingChanges = true; updateSyncIndicator('pending'); });
 db.invoiceItems?.hook('deleting', () => { hasPendingChanges = true; updateSyncIndicator('pending'); });
 
+// === SCROLL POSITION MANAGER ===
+const scrollPositions = {};
+let currentTab = 'daily';
+let currentCalendarCustomer = 'all';
+
+function saveScrollPosition(containerId) {
+    const el = document.getElementById(containerId);
+    if (el) scrollPositions[containerId] = el.scrollTop;
+}
+
+function restoreScrollPosition(containerId) {
+    const el = document.getElementById(containerId);
+    if (el && scrollPositions[containerId] !== undefined) {
+        el.scrollTo({ top: scrollPositions[containerId], behavior: 'auto' });
+    }
+}
+// === END SCROLL MANAGER ===
+
 db.invoiceAdjustments?.hook('creating', () => { hasPendingChanges = true; updateSyncIndicator('pending'); });
 db.invoiceAdjustments?.hook('deleting', () => { hasPendingChanges = true; updateSyncIndicator('pending'); });
 
@@ -1678,6 +1696,7 @@ async function renderApp() {
 
 // Ensure the date picker also calls the new renderApp
 async function changeAppDate(val) {
+    scrollPositions['main'] = 0;
     selectedDate = val;
     const display = document.getElementById('displayDate');
 
@@ -1720,15 +1739,17 @@ async function changeAppDate(val) {
 async function showTab(tabName) {
     const daily = document.getElementById('dailyScreen');
     const invoices = document.getElementById('invoiceScreen');
-    const calendar = document.getElementById('calendarScreen'); // Ensure this ID matches your HTML
+    const calendar = document.getElementById('calendarScreen');
     const addBtn = document.querySelector('button[onclick="showAddCustomer()"]');
     const picker = document.getElementById('mainDatePicker');
     const routeShareButton = document.getElementById('routesharebutton');
     const walkin = document.getElementById('walkinContainer');
 
+    // Save scroll position of current tab before switching
+    if (currentTab === 'daily') saveScrollPosition('main');
+    else if (currentTab === 'invoices') saveScrollPosition('invoiceListContainer');
+
     // 1. Hide all screens first for a clean slate
-
-
     if (daily) daily.classList.add('hidden');
     if (invoices) invoices.classList.add('hidden');
     if (calendar) calendar.classList.add('hidden');
@@ -1744,13 +1765,18 @@ async function showTab(tabName) {
     if (tabName === 'invoices') {
         invoices.classList.remove('hidden');
         initializeInvoiceMonthPicker();
+        restoreScrollPosition('invoiceListContainer');
     }
     else if (tabName === 'calendar') {
         const calendar = document.getElementById('calendarScreen');
         if (calendar) calendar.classList.remove('hidden');
 
-        // Fill the dropdown before rendering
         await populateCalendarCustomerDropdown();
+        
+        // Restore customer selector AFTER populating dropdown options
+        const selector = document.getElementById('calendarCustomerSelector');
+        if (selector) selector.value = currentCalendarCustomer;
+        
         renderCalendar();
     }
     else {
@@ -1763,10 +1789,11 @@ async function showTab(tabName) {
             walkin.style.display = 'block';
         }
         renderList();
+        restoreScrollPosition('main');
     }
 
-
-
+    // Update current tab and restore its scroll
+    currentTab = tabName;
 
     // 4. Update footer icons visual state
     updateFooterUI(tabName);

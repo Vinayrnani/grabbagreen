@@ -8,6 +8,7 @@ async function renderCalendar() {
     const customerSelector = document.getElementById('calendarCustomerSelector');
 
     if (!customerSelector) return;
+    currentCalendarCustomer = customerSelector.value;
     const customerId = isNaN(customerSelector.value) ? customerSelector.value : Number(customerSelector.value);
 
     grid.innerHTML = '';

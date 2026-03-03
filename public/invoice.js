@@ -714,9 +714,9 @@ function filterInvoices(status) {
     currentInvoiceFilter = status;
     
     document.querySelectorAll('.filter-btn').forEach(btn => {
-        btn.className = 'filter-btn px-4 py-2 rounded-full text-xs font-bold bg-gray-100 text-gray-600';
+        btn.className = 'filter-btn px-4 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-600';
     });
-    event.target.className = 'filter-btn px-4 py-2 rounded-full text-xs font-bold bg-gray-800 text-white';
+    event.target.className = 'filter-btn px-4 py-1 rounded-full text-xs font-bold bg-gray-800 text-white';
     
     renderInvoices();
 }

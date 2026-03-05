@@ -26,73 +26,17 @@ db.version(15).stores({
     }));
 });
 
-// === AUTOMATIC TIMESTAMPS VIA HOOKS ===
+// === AUTOMATIC TIMESTAMPS VIA GLOBAL HOOKS ===
+// Applies to ALL tables automatically
 
-// Helper to get current timestamp
-function getTimestamp() {
-    return new Date().toISOString();
-}
-
-// Hook for CREATE operations (add, put that creates new)
-db.customers.hook('creating', (primKey, obj) => {
-    const now = getTimestamp();
+db.hook('creating', (primKey, obj) => {
+    const now = new Date().toISOString();
     obj.createdAt = now;
     obj.updatedAt = now;
 });
 
-db.attendance.hook('creating', (primKey, obj) => {
-    const now = getTimestamp();
-    obj.createdAt = now;
-    obj.updatedAt = now;
-});
-
-db.invoices.hook('creating', (primKey, obj) => {
-    const now = getTimestamp();
-    obj.createdAt = now;
-    obj.updatedAt = now;
-});
-
-db.invoiceItems.hook('creating', (primKey, obj) => {
-    const now = getTimestamp();
-    obj.createdAt = now;
-    obj.updatedAt = now;
-});
-
-db.invoiceAdjustments.hook('creating', (primKey, obj) => {
-    const now = getTimestamp();
-    obj.createdAt = now;
-    obj.updatedAt = now;
-});
-
-db.payments.hook('creating', (primKey, obj) => {
-    const now = getTimestamp();
-    obj.createdAt = now;
-    obj.updatedAt = now;
-});
-
-// Hook for UPDATE operations (update, put that updates existing)
-db.customers.hook('updating', (mods) => {
-    mods.updatedAt = getTimestamp();
-});
-
-db.attendance.hook('updating', (mods) => {
-    mods.updatedAt = getTimestamp();
-});
-
-db.invoices.hook('updating', (mods) => {
-    mods.updatedAt = getTimestamp();
-});
-
-db.invoiceItems.hook('updating', (mods) => {
-    mods.updatedAt = getTimestamp();
-});
-
-db.invoiceAdjustments.hook('updating', (mods) => {
-    mods.updatedAt = getTimestamp();
-});
-
-db.payments.hook('updating', (mods) => {
-    mods.updatedAt = getTimestamp();
+db.hook('updating', (mods) => {
+    mods.updatedAt = new Date().toISOString();
 });
 
 // Make db available globally for other scripts

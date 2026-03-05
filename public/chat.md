@@ -322,5 +322,19 @@ Syntax OK.
 
 ---
 
+## Prompt: why 12 hooks cant it be 2 hooks with dynamic table list of all db tables?
+
+## Response: You're right! Can use global db.hook() instead of table-specific hooks. Much cleaner.
+
+---
+
+## Prompt: go ahead safely if no sideeffects ppp
+
+## Response: Refactored from 12 hooks to 2 global hooks using db.hook(). 56 lines reduced to ~10. Cleaner and applies to all tables automatically.
+
+Syntax OK.
+
+---
+
 ## Prompt: ppp
 

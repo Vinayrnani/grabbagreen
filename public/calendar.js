@@ -142,5 +142,7 @@ async function populateCalendarCustomerDropdown() {
 async function changeMonth(step) {
     currentDisplayDate.setMonth(currentDisplayDate.getMonth() + step);
     await populateCalendarCustomerDropdown();
+    const selector = document.getElementById('calendarCustomerSelector');
+    if (selector) selector.value = currentCalendarCustomer;
     renderCalendar();
 }

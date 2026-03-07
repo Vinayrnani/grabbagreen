@@ -137,6 +137,13 @@ async function populateCalendarCustomerDropdown() {
     selector.innerHTML = filteredCustomers.map(c =>
         `<option value="${c.id}">${c.name}</option>`
     ).join('');
+
+    const validIds = filteredCustomers.map(c => String(c.id));
+    if (!validIds.includes(String(selector.value))) {
+        if (filteredCustomers.length > 0) {
+            selector.value = filteredCustomers[0].id;
+        }
+    }
 }
 
 async function changeMonth(step) {

@@ -1244,7 +1244,7 @@ async function generateADVPdf(custId, amount, invoiceNumber, name, nickname, pla
     
     // HEADER with Logo
     try { 
-        doc.addImage('logo.jpg', 'JPEG', 15, 10, 25, 25);
+        doc.addImage('logo.jpg', 'JPEG', 15, 15, 70, 30);
     } catch(e) { console.log('Logo load failed', e); }
     
     doc.setTextColor(40, 40, 40);

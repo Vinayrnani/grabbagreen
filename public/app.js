@@ -1266,7 +1266,7 @@ async function generateADVPdf(custId, amount, invoiceNumber, name, nickname, pla
     const tableBody = [
         [lineItem, 1, `Rs. ${amount.toLocaleString('en-IN')}`, `Rs. ${amount.toLocaleString('en-IN')}`],
         ['', '', 'Total', `Rs. ${amount.toLocaleString('en-IN')}`],
-        ['', '', 'PAID ✓', '']
+        ['', '', 'PAID ✓', `Rs. ${amount.toLocaleString('en-IN')}`]
     ];
     
     doc.autoTable({

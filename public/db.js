@@ -3,8 +3,9 @@
 
 const db = new Dexie("SaladDB");
 
-db.version(15).stores({
-    customers: '++id, name, nickname, route, plan, status, vacationUntil, pendingAddonDate, mobile, discount, createdAt, updatedAt',
+db.version(16).stores({
+    customers: '++id, name, nickname, route, plan, status, vacationUntil, pendingAddonDate, mobile, discount, paymentType, advanceBalance, createdAt, updatedAt',
+    advances: '++id, custId, amount, date, invoiceNumber, notes, createdAt',
     attendance: '++id, [custId+date], date, status, addons, isWalkIn, quantity, isVacation, inclusion, addon, coupleAddon1, coupleAddon2, extraAddons, createdAt, updatedAt',
     logs: '++id, timestamp, action',
     settings: 'id, value',
@@ -24,20 +25,21 @@ db.version(15).stores({
             if (!record.updatedAt) record.updatedAt = now;
         });
     }));
-});
-
-// === AUTOMATIC TIMESTAMPS VIA GLOBAL HOOKS ===
-// Applies to ALL tables automatically
-
-db.hook('creating', (primKey, obj) => {
-    const now = new Date().toISOString();
-    obj.createdAt = now;
-    obj.updatedAt = now;
-});
-
-db.hook('updating', (mods) => {
-    mods.updatedAt = new Date().toISOString();
+}).upgrade(tx => {
+    // v16: Add paymentType and advanceBalance to customers
+    return tx.table('customers').toCollection().modify(record => {
+        if (!record.paymentType) record.paymentType = 'postpaid';
+        if (record.advanceBalance === undefined) record.advanceBalance = 0;
+    });
 });
 
 // Make db available globally for other scripts
 window.db = db;
+
+// Optional hooks for sync indicator (use optional chaining to prevent errors if Dexie version doesn't support hooks)
+try {
+    db.customers?.hook('creating', () => { window.hasPendingChanges = true; window.updateSyncIndicator?.('pending'); });
+    db.customers?.hook('updating', () => { window.hasPendingChanges = true; window.updateSyncIndicator?.('pending'); });
+} catch(e) {
+    console.log('DB hooks not supported in this version');
+}

@@ -448,6 +448,40 @@
                         </div>
                     </div>
                 </div>
+
+                <div class="border-t pt-4">
+                    <label class="text-[10px] font-bold text-gray-400 uppercase block mb-2">Payment Type</label>
+                    <div class="flex gap-4 mb-3">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" name="editPaymentType" value="postpaid" class="w-4 h-4">
+                            <span class="font-bold text-sm">Postpaid</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" name="editPaymentType" value="prepaid" class="w-4 h-4">
+                            <span class="font-bold text-sm">Prepaid</span>
+                        </label>
+                    </div>
+                    
+                    <!-- Already prepaid - show advance as read-only -->
+                    <div id="editAdvancePaidSection" class="hidden">
+                        <div class="bg-gray-100 p-3 rounded-xl">
+                            <span class="text-[10px] font-bold text-gray-500 uppercase">Initial Advance Paid</span>
+                            <p id="editAdvanceBalanceDisplay" class="text-lg font-bold text-gray-700">₹0</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Changing to prepaid - show input -->
+                    <div id="editAdvanceInputSection" class="hidden space-y-3">
+                        <div>
+                            <label class="text-[10px] font-bold text-gray-400 uppercase block mb-1">Initial Advance (₹)</label>
+                            <input id="editAddMoreAdvance" type="number" placeholder="Enter advance amount" class="w-full border p-2 rounded-lg text-sm">
+                            <button id="editShareAdvanceBtn" type="button" onclick="saveAndShareAdvanceFromEdit()"
+                                class="w-full mt-2 bg-blue-600 text-white py-2 rounded-lg font-bold text-sm">
+                                Save & Share Invoice
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div class="mt-8 flex flex-col gap-3">

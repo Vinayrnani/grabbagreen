@@ -2,6 +2,7 @@
 // All invoice functionality separated from app.js
 
 // Constants
+// Note: PRICES is defined in app.js and available globally
 const ADDON_PRICES = {
     'C': 100, 'PR': 140, 'F': 110, 'SE': 50, 'BE': 40,
     'P': 90, 'T': 90, 'A': 60, 'V': 60, 'S': 200
@@ -80,6 +81,7 @@ async function addInvoiceLineItems(invoiceId, records, cust, monthYear) {
     const isSubscriber = deliveredCount >= (workingDays * 0.8);
     const fiftyPercent = workingDays * 0.5;
     const isFiftyPlus = deliveredCount >= fiftyPercent;
+    const isPrepaid = cust.paymentType === 'prepaid';
 
     if (cust.plan === 'Couple') {
         const s1Count = records.filter(r => r.inclusion === 'S1').length;
@@ -87,7 +89,9 @@ async function addInvoiceLineItems(invoiceId, records, cust, monthYear) {
         const totalSalads = s1Count + (s2Count * 2);
 
         let rate;
-        if (isSubscriber && s2Count === deliveredCount) {
+        if (isPrepaid) {
+            rate = PRICES['Couple'] / 26;
+        } else if (isSubscriber && s2Count === deliveredCount) {
             rate = 173.06;
         } else if (isSubscriber && s2Count > s1Count) {
             rate = 182.67;
@@ -107,7 +111,9 @@ async function addInvoiceLineItems(invoiceId, records, cust, monthYear) {
         });
     } else {
         let unitPrice;
-        if (cust.plan === 'Regular') {
+        if (isPrepaid) {
+            unitPrice = (PRICES[cust.plan] || 5000) / 26;
+        } else if (cust.plan === 'Regular') {
             unitPrice = isSubscriber ? 192.27 : 200;
         } else if (cust.plan === 'Premium') {
             unitPrice = 249.96;
@@ -146,6 +152,8 @@ async function addInvoiceLineItems(invoiceId, records, cust, monthYear) {
             amount: count * ADDON_PRICES[code]
         });
     }
+
+    // Note: Advance is kept as safety deposit - customers still pay full price for deliveries
 }
 
 // Recalculate totals
@@ -486,7 +494,7 @@ async function shareInvoiceText(invoiceId) {
             });
             await db.invoices.update(invoiceId, { textShared: true });
             
-            const invoice = await db.invoices.get(invoiceId);
+            invoice = await db.invoices.get(invoiceId);
             if (invoice.pdfShared) {
                 await markInvoiceSent(invoiceId);
             }
@@ -506,7 +514,7 @@ async function shareInvoiceText(invoiceId) {
     
     await db.invoices.update(invoiceId, { textShared: true });
     
-    const invoice = await db.invoices.get(invoiceId);
+    invoice = await db.invoices.get(invoiceId);
     if (invoice.pdfShared) {
         await markInvoiceSent(invoiceId);
     }
@@ -516,10 +524,11 @@ async function shareInvoiceText(invoiceId) {
 
 // Share PDF via Native Share
 async function shareInvoicePDF(invoiceId) {
-    const doc = await generateInvoicePDF(invoiceId);
-    const pdfBlob = doc.output('blob');
     const invoice = await db.invoices.get(invoiceId);
     const cust = await db.customers.get(invoice.custId);
+    
+    const doc = await generateInvoicePDF(invoiceId);
+    const pdfBlob = doc.output('blob');
     const customerName = cust.name || cust.nickname;
     const fileName = `${customerName}_Invoice_${invoice.invoiceNumber}.pdf`;
     const file = new File([pdfBlob], fileName, { type: 'application/pdf' });

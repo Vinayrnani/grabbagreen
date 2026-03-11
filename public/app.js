@@ -377,13 +377,14 @@ function generateCardHTML(cust, todayEntry, attendanceMap, coupleAddonCounts, vi
 
     const isOnVacation = todayEntry && todayEntry.isVacation;
 
+    const isPrepaid = cust.paymentType === 'prepaid';
     return `
         <div id="card-${cust.id}" class="customer-card p-4 rounded-xl border-l-8 flex justify-between items-center transition-all shadow-2xl h-[100px] ${statusConfig.cardClass}">
             <div class="flex-1 relative h-[90px]">
                 <div class="flex items-center gap-2 py-0.5">
                     <span class="bg-gray-800 text-white text-[10px] px-2 py-0.5 rounded font-bold">${cust.route}</span>
                     <span class="${planColor} text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center shadow-sm">${getPlanAbbreviation(cust.plan)}</span>
-                    <h3 class="font-bold text-xl text-gray-900">${cust.nickname || cust.name} ${addonBadge}</h3>
+                    <h3 class="font-bold text-xl text-gray-900 ${isPrepaid ? 'underline decoration-2 underline-offset-2' : ''}">${cust.nickname || cust.name} ${addonBadge}</h3>
                 </div>
                 
                 ${!isOnVacation && !(todayEntry && todayEntry.status === 'skipped') ? `
@@ -1082,6 +1083,26 @@ function showAddCustomer() {
                 <option value="Couple">Couple (₹8999)</option>
                 <option value="MealBox">Meal Box (₹7800)</option>
             </select>
+            
+            <div class="border-t pt-4">
+                <label class="text-xs font-bold text-gray-500 uppercase block mb-2">Payment Type</label>
+                <div class="flex gap-4 mb-3">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="newCustPaymentType" value="postpaid" checked class="w-4 h-4">
+                        <span class="font-bold text-sm">Postpaid</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="newCustPaymentType" value="prepaid" class="w-4 h-4">
+                        <span class="font-bold text-sm">Prepaid</span>
+                    </label>
+                </div>
+                <div id="prepaidFields" class="hidden space-y-3">
+                    <div>
+                        <label class="text-xs font-bold text-gray-500 uppercase block mb-1">Advance Amount (₹)</label>
+                        <input id="newCustAdvance" type="number" placeholder="Enter advance amount" class="w-full border p-3 rounded-lg">
+                    </div>
+                </div>
+            </div>
         </div>
     `;
 
@@ -1092,26 +1113,17 @@ function showAddCustomer() {
         const discount = parseFloat(document.getElementById('newCustDiscount').value) || 0;
         const route = document.getElementById('newCustRoute').value;
         const plan = document.getElementById('newCustPlan').value;
+        const paymentType = document.querySelector('input[name="newCustPaymentType"]:checked')?.value || 'postpaid';
+        const advanceAmount = parseFloat(document.getElementById('newCustAdvance')?.value) || 0;
 
         // 1. Validation Logic
         if (!name) {
             alert("Please enter a Full Name.");
             return false;
         }
-        /*if (!nickname) {
-            alert("Please enter a Nickname.");
-            return false;
-        }
-
-        // 2. Mobile Validation (Regex for exactly 10 digits)
-        const mobilePattern = /^[0-9]{10}$/;
-        if (!mobilePattern.test(mobile)) {
-            alert("Please enter a valid 10-digit mobile number.");
-            return false;
-        }*/
 
         // If all validations pass, save to DB
-        await db.customers.add({
+        const customerId = await db.customers.add({
             name,
             nickname,
             mobile,
@@ -1119,14 +1131,185 @@ function showAddCustomer() {
             route,
             plan,
             status: 'active',
-            vacationUntil: null
+            vacationUntil: null,
+            paymentType,
+            advanceBalance: advanceAmount
         });
+
+        // If advance amount entered, save to advances table and generate ADV invoice
+        if (paymentType === 'prepaid' && advanceAmount > 0) {
+            const invoiceNumber = await generateADVNumber();
+            await db.advances.add({
+                custId: customerId,
+                amount: advanceAmount,
+                date: getToday(),
+                invoiceNumber
+            });
+            await shareADVInvoice(customerId, advanceAmount, invoiceNumber, null, null, plan);
+        }
 
         renderList();
         return true;
     });
+
+    // Show/hide prepaid fields based on selection
+    setTimeout(() => {
+        const radios = document.querySelectorAll('input[name="newCustPaymentType"]');
+        const prepaidFields = document.getElementById('prepaidFields');
+        radios.forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                if (e.target.value === 'prepaid') {
+                    prepaidFields.classList.remove('hidden');
+                } else {
+                    prepaidFields.classList.add('hidden');
+                }
+            });
+        });
+    }, 100);
 }
 
+// Generate ADV invoice number
+async function generateADVNumber() {
+    const allAdvances = await db.advances.toArray();
+    const year = new Date().getFullYear();
+    const prefix = `ADV-${year}-`;
+    const yearAdvances = allAdvances.filter(a => a.invoiceNumber && a.invoiceNumber.startsWith(prefix));
+    const maxNum = yearAdvances.reduce((max, a) => {
+        const num = parseInt(a.invoiceNumber.split('-')[2]);
+        return num > max ? num : max;
+    }, 0);
+    return `${prefix}${String(maxNum + 1).padStart(4, '0')}`;
+}
+
+// Share ADV Invoice
+async function shareADVInvoice(custId, amount, invoiceNumber, name = null, nickname = null, plan = null) {
+    let cust;
+    let planName = plan;
+    if (custId > 0) {
+        cust = await db.customers.get(custId);
+        name = cust.name;
+        nickname = cust.nickname || name;
+        planName = planName || cust.plan || '';
+    } else {
+        // Temporary customer from add flow
+        name = name || 'Customer';
+        nickname = nickname || name;
+    }
+
+    const date = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    const message = `📄 *Advance Payment Receipt*\n\n${invoiceNumber}\nDate: ${date}\n\n*From:* ${nickname}\n\n*Amount Received:* ₹${amount.toLocaleString('en-IN')}\n\n*Payment Type:* Prepaid\n\nThank you for your payment!`;
+
+    const blob = await generateADVPdf(custId, amount, invoiceNumber, name, nickname, planName);
+    
+    if (navigator.share) {
+        try {
+            const file = new File([blob], `${invoiceNumber}.pdf`, { type: 'application/pdf' });
+            await navigator.share({
+                title: `${invoiceNumber} - Advance Payment`,
+                text: message,
+                files: [file]
+            });
+        } catch (err) {
+            if (err.name !== 'AbortError') {
+                console.log('Share cancelled, downloading instead');
+                downloadPDF(blob, `${invoiceNumber}.pdf`);
+            }
+        }
+    } else {
+        downloadPDF(blob, `${invoiceNumber}.pdf`);
+    }
+}
+
+// Generate ADV PDF - Following regular invoice template
+async function generateADVPdf(custId, amount, invoiceNumber, name, nickname, plan = null) {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const centerX = pageWidth / 2;
+    const today = new Date();
+    const dateStr = today.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    const year = today.getFullYear();
+    
+    // Get plan from customer if not provided
+    let planName = plan;
+    if (!planName && custId > 0) {
+        const cust = await db.customers.get(custId);
+        planName = cust.plan || '';
+    }
+    
+    // Background
+    doc.setFillColor(246, 247, 241);
+    doc.rect(0, 0, 210, 297, 'F');
+    
+    // HEADER with Logo
+    try { 
+        doc.addImage('data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADb/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoHBwYIDAoMDAsKCwsNDhIQDQ4RDgsLEBYQERMUFRUVDA8XGBYUGBIUFRT/2wBDAQMEBAUEBQkFBQkUDQsNFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBT/wAARCACcAW8DASIAAhEBAxEB/8QAHQAAAQQDAQEAAAAAAAAAAAAACAECBwkABQYDBP/EAF0QAAECBQMCAwYBBwUFEREAAAECAwAEBQYRBxIhCDETQVEJFCIyYXGBFRYjQlKRoRckM2KxNENytNIYGSZERlNzdIKSo6SywdHT1CUnKEVUVmN2g4WUosLDxOHw/8QAGwEBAAMBAQEBAAAAAAAAAAAAAAECAwQFBgf/xAAsEQACAgICAgICAQIHAQAAAAAAAQIDBBEhMRITBUEiUTIUYRUjQlJxgbHB/9oADAMBAAIRAxEAPwCzjOIQnb2OSY9EEeEDgZhigN+QMRzlxyeAM94wcmEJOYeBwIlAXELmGqScd4UdhEgyMj5KjVZSjyL09PvsycjLpK3ZmYcCG0AdypROB9oDzWX2jlBoRmKZpzTk3ROJWppVZn1Kl6ehYJBLecKe+m07T5cGJ0VYZpIOcYGPm+IHA/eAI4S79d9OrDmhL1+96JS5lOcyrs6hT3H/AKNO5RP0EVYXprbqzrfVVylRr9crinStKaJR23Wpc7uyPd5cBKwnOB4pUrjkk5MdVZXQvrFdDSAi0mrXlNqSh2tzTMuCnHB2I8VaOP1SkEdiAeInWiA2Zzr80Sk3FtouifmFoJSS1QJ4pJHmCpoAj65jwHtCtEiBvr9UQfU0GdP/ACWzEAU72Y15PMJM/fVCp75AyJaTemkj7FRaz9+M+gj7HPZfXI2Ds1Hpc6vHZVFdZH7w8uHACltTq60fvBDSpC/qWwpwhIbqniU9e702zCEf2xLEjUJWqSaJyRmWp2XcSFImJZYdbUkjII2qIIx5xWVdfs8NWqCh1ymJoVzMoztZkp0tPqx2+F9LaQT6bj9zEPzVvao9PFVbfekbm09nA54heYU6xLOqPfLrRU06c9wrcg+pENbBc4MEesYlJyR6xXLpJ7Rq6bdMrI6gyDd0yCAlKqpJNpl53AGCtbaAG1+p2gA+XEHLpVrPZ+s9vIrNoVhFUZwUus4CZhhYPKXGj2IPBxxwcRGtA7gDbxCFYzCLUTuORn1T2/CETykQA5R4zCKPwiMHIMZ5RVgbk+sYpJxmMPeFUFbRxEAbCgZ', 'JPEG', 15, 10, 25, 25);
+    } catch(e) { console.log('Logo load failed', e); }
+    
+    doc.setTextColor(40, 40, 40);
+    doc.setFontSize(8);
+    doc.text("9346379970, 9121448100", 50, 50);
+    doc.setFontSize(24);
+    doc.setFont("helvetica", "bold");
+    doc.text("INVOICE", 150, 30);
+    doc.setFontSize(10);
+    doc.text(`#${invoiceNumber}`, 150, 38);
+    doc.text(`Date: ${dateStr}`, 150, 43);
+    doc.text(`Billing: ${year} (Advance)`, 150, 48);
+    doc.text(`To,`, 15, 60);
+    doc.setFontSize(14);
+    doc.text(nickname, 15, 68);
+    
+    // Line item with plan name
+    const lineItem = planName ? `Advance payment for ${planName}` : 'Advance Payment (Initial)';
+    const tableBody = [
+        [lineItem, 1, `Rs. ${amount.toLocaleString('en-IN')}`, `Rs. ${amount.toLocaleString('en-IN')}`],
+        ['', '', 'Total', `Rs. ${amount.toLocaleString('en-IN')}`],
+        ['', '', 'PAID ✓', '']
+    ];
+    
+    doc.autoTable({
+        startY: 80,
+        head: [['Product', 'Qty', 'Price', 'Total']],
+        body: tableBody,
+        theme: 'grid',
+        headStyles: { fillColor: [34, 197, 94], textColor: 255, fontStyle: 'bold' },
+        styles: { fontSize: 10, cellPadding: 3 },
+        columnStyles: {
+            0: { cellWidth: 80 },
+            1: { cellWidth: 25, halign: 'center' },
+            2: { cellWidth: 40, halign: 'right' },
+            3: { cellWidth: 40, halign: 'right' }
+        }
+    });
+    
+    // Footer
+    doc.setFontSize(9);
+    doc.setTextColor(150, 150, 150);
+    doc.text('Thank you for choosing Grabb A Green!', centerX, 250, { align: 'center' });
+    doc.text('Eat Green, Feel Great.', centerX, 257, { align: 'center' });
+    
+    // Note at bottom
+    doc.setFontSize(8);
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Note: Received advance amount of Rs. ${amount.toLocaleString('en-IN')} from customer.`, centerX, 270, { align: 'center' });
+    doc.text('Monthly invoice will be generated based on current month deliveries.', centerX, 276, { align: 'center' });
+    
+    return doc.output('blob');
+}
+
+// Download PDF helper
+function downloadPDF(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
 
 
 // --- NEW FEATURE: WALK-IN / IN-STORE ENTRY ---
@@ -1496,6 +1679,7 @@ async function importData() {
 
 
 let currentEditingId = null;
+let currentEditingCust = null;
 
 // Add this to your card generation in renderList
 // 1. GLOBAL BLOCKER: Prevents the menu from ever appearing on cards
@@ -1599,6 +1783,7 @@ function handleMenuVacation() {
 async function openEditModal(custId) {
     const cust = await db.customers.get(custId);
     currentEditingId = custId;
+    currentEditingCust = cust;
 
     // Load both names
     document.getElementById('editFullName').value = cust.name || '';
@@ -1621,11 +1806,55 @@ async function openEditModal(custId) {
     document.getElementById('editDiscount').value = cust.discount || 0;
     document.getElementById('editmobile').value = cust.mobile || '';
 
+    // Payment type
+    const paymentType = cust.paymentType || 'postpaid';
+    const paymentTypeRadio = document.querySelector(`input[name="editPaymentType"][value="${paymentType}"]`);
+    if (paymentTypeRadio) paymentTypeRadio.checked = true;
+    
+    // Show advance section based on payment type
+    const advancePaidSection = document.getElementById('editAdvancePaidSection');
+    const advanceInputSection = document.getElementById('editAdvanceInputSection');
+    
+    if (paymentType === 'prepaid') {
+        // Already prepaid - show read-only balance
+        advancePaidSection.classList.remove('hidden');
+        advanceInputSection.classList.add('hidden');
+        document.getElementById('editAdvanceBalanceDisplay').textContent = '₹' + (cust.advanceBalance || 0).toLocaleString('en-IN');
+    } else {
+        // Not prepaid yet - hide both
+        advancePaidSection.classList.add('hidden');
+        advanceInputSection.classList.add('hidden');
+    }
+
+    // Add event listeners for payment type change
+    setTimeout(() => {
+        const radios = document.querySelectorAll('input[name="editPaymentType"]');
+        radios.forEach(radio => {
+            radio.onchange = (e) => {
+                if (e.target.value === 'prepaid') {
+                    // Changing to prepaid - show input
+                    advancePaidSection.classList.add('hidden');
+                    advanceInputSection.classList.remove('hidden');
+                } else {
+                    // Changed to postpaid
+                    advancePaidSection.classList.add('hidden');
+                    advanceInputSection.classList.add('hidden');
+                }
+            };
+        });
+    }, 100);
+
     document.getElementById('editModal').classList.remove('hidden');
 }
 
 async function saveCustomerEdit() {
     if (!currentEditingId) return;
+
+    const cust = currentEditingCust || await db.customers.get(currentEditingId);
+    const paymentType = document.querySelector('input[name="editPaymentType"]:checked')?.value || 'postpaid';
+    
+    // Preserve existing advance balance
+    const advanceBalance = cust.advanceBalance || 0;
 
     const update = {
         name: document.getElementById('editFullName').value,
@@ -1634,7 +1863,9 @@ async function saveCustomerEdit() {
         plan: document.getElementById('editPlan').value,
         status: document.getElementById('editStatusToggle').checked ? 'active' : 'inactive',
         mobile: document.getElementById('editmobile').value,
-        discount: parseFloat(document.getElementById('editDiscount').value) || 0
+        discount: parseFloat(document.getElementById('editDiscount').value) || 0,
+        paymentType,
+        advanceBalance
     };
 
     await db.customers.update(currentEditingId, update);
@@ -1642,10 +1873,57 @@ async function saveCustomerEdit() {
     await renderList();
     showUndo("Profile updated");
 }
+
+// Save and Share Advance from Edit modal
+async function saveAndShareAdvanceFromEdit() {
+    const addMoreAdvance = parseFloat(document.getElementById('editAddMoreAdvance')?.value);
+    if (!addMoreAdvance || addMoreAdvance <= 0) {
+        alert("Please enter a valid advance amount.");
+        return;
+    }
+
+    const cust = currentEditingCust || await db.customers.get(currentEditingId);
+    const plan = document.getElementById('editPlan').value;
+    
+    // Save the profile update - overwrite advance amount (replace existing)
+    const update = {
+        name: document.getElementById('editFullName').value,
+        nickname: document.getElementById('editNickname').value,
+        route: document.querySelector('input[name="editRoute"]:checked')?.value || 'A',
+        plan: plan,
+        status: document.getElementById('editStatusToggle').checked ? 'active' : 'inactive',
+        mobile: document.getElementById('editmobile').value,
+        discount: parseFloat(document.getElementById('editDiscount').value) || 0,
+        paymentType: 'prepaid',
+        advanceBalance: addMoreAdvance
+    };
+    
+    await db.customers.update(currentEditingId, update);
+    
+    // Save advance to advances table (overwrite - delete old and add new)
+    await db.advances.where({custId: currentEditingId}).delete();
+    const invoiceNumber = await generateADVNumber();
+    await db.advances.add({
+        custId: currentEditingId,
+        amount: addMoreAdvance,
+        date: getToday(),
+        invoiceNumber
+    });
+
+    // Share invoice
+    await shareADVInvoice(currentEditingId, addMoreAdvance, invoiceNumber, null, null, plan);
+    
+    // Close modal and refresh
+    closeEditModal();
+    renderList();
+    showUndo("Advance updated!");
+}
 // 1. GLOBAL UI HELPERS
 window.closeEditModal = function () {
     const modal = document.getElementById('editModal');
     if (modal) modal.classList.add('hidden');
+    currentEditingId = null;
+    currentEditingCust = null;
 };
 // V1.5 Walk-in Logic
 // Update Walk-In counts (Stored under customerId: 0)

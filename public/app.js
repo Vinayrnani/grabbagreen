@@ -1024,6 +1024,9 @@ async function init() {
         ]);
     }
     renderApp();
+    
+    // Pull delivery updates from cloud
+    pullDeliveryUpdates();
 }
 /*async function showAddCustomer() {
     const name = prompt("Enter Customer Full Name:");
@@ -2644,6 +2647,19 @@ async function openRouteShareSelector() {
         </button>
     `).join('');
 
+    // Check if routes are already published and update button text
+    const publishBtn = document.getElementById('publishRoutesBtn');
+    const isPublished = await checkPublishedStatus();
+    if (isPublished) {
+        publishBtn.textContent = 'Republish Routes';
+        publishBtn.classList.remove('bg-green-500', 'hover:bg-green-600');
+        publishBtn.classList.add('bg-orange-500', 'hover:bg-orange-600');
+    } else {
+        publishBtn.textContent = 'Publish Routes';
+        publishBtn.classList.add('bg-green-500', 'hover:bg-green-600');
+        publishBtn.classList.remove('bg-orange-500', 'hover:bg-orange-600');
+    }
+
     document.getElementById('routeShareModal').classList.remove('hidden');
 }
 
@@ -2729,6 +2745,275 @@ async function processRouteShare(route) {
 
     document.getElementById('routeShareModal').classList.add('hidden');
     window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`, '_blank');
+}
+
+// --- DELIVERY ROUTES MANAGEMENT ---
+
+// Get route identifiers from localStorage or Firestore
+async function getRouteIdentifiers() {
+    let stored = localStorage.getItem('routeIdentifiers');
+    if (stored) {
+        return JSON.parse(stored);
+    }
+    return {};
+}
+
+// Save route identifiers to localStorage and Firestore
+async function saveDriverNumbers() {
+    const identifiers = {};
+    const routes = [...new Set((await db.customers.toArray()).map(c => c.route))].filter(Boolean);
+    
+    for (const route of routes) {
+        const input = document.getElementById(`driver_${route}`);
+        if (input && input.value.trim()) {
+            identifiers[route] = input.value.trim();
+        }
+    }
+    
+    localStorage.setItem('routeIdentifiers', JSON.stringify(identifiers));
+    
+    // Also save to Firestore for cross-device access
+    try {
+        await fs.collection('delivery_settings').doc('route_identifiers').set({
+            identifiers: identifiers,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+    } catch (e) {
+        console.log('Could not save to cloud:', e);
+    }
+    
+    document.getElementById('driverNumbersModal').classList.add('hidden');
+    alert('Driver numbers saved!');
+}
+
+// Open modal to set driver numbers
+async function openDriverNumbersModal() {
+    const routes = [...new Set((await db.customers.toArray()).map(c => c.route))].filter(Boolean);
+    const identifiers = await getRouteIdentifiers();
+    
+    // Also try to load from Firestore
+    try {
+        const doc = await fs.collection('delivery_settings').doc('route_identifiers').get();
+        if (doc.exists && doc.data().identifiers) {
+            const cloudIds = doc.data().identifiers;
+            for (const route of routes) {
+                if (!identifiers[route] && cloudIds[route]) {
+                    identifiers[route] = cloudIds[route];
+                }
+            }
+        }
+    } catch (e) {
+        console.log('Could not load from cloud:', e);
+    }
+    
+    const container = document.getElementById('driverNumbersList');
+    container.innerHTML = routes.map(route => `
+        <div class="flex items-center gap-2">
+            <span class="bg-gray-800 text-white text-xs px-2 py-1 rounded font-bold w-8 text-center">${route}</span>
+            <input type="tel" id="driver_${route}" value="${identifiers[route] || ''}" 
+                placeholder="Mobile number"
+                class="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm font-bold">
+        </div>
+    `).join('');
+    
+    if (routes.length === 0) {
+        container.innerHTML = '<p class="text-center text-gray-400 text-sm">No routes found. Add customers with routes first.</p>';
+    }
+    
+    document.getElementById('driverNumbersModal').classList.remove('hidden');
+}
+
+// Check if routes are already published for today
+async function checkPublishedStatus() {
+    const today = getToday();
+    try {
+        const snapshot = await fs.collection('delivery_customers')
+            .where('date', '==', today)
+            .limit(1)
+            .get();
+        return !snapshot.empty;
+    } catch (e) {
+        console.log('Error checking publish status:', e);
+        return false;
+    }
+}
+
+// Publish routes to Firestore
+async function publishRoutes() {
+    const today = getToday();
+    const identifiers = await getRouteIdentifiers();
+    
+    if (Object.keys(identifiers).length === 0) {
+        alert('Please set driver mobile numbers first using "Set Drivers" button.');
+        return;
+    }
+    
+    // Check if already published
+    const alreadyPublished = await checkPublishedStatus();
+    
+    if (alreadyPublished) {
+        if (!confirm('Already published records for today will be deleted. Republish?')) {
+            return;
+        }
+        // Delete existing records for today
+        try {
+            const existing = await fs.collection('delivery_customers')
+                .where('date', '==', today)
+                .get();
+            const batch = fs.batch();
+            existing.docs.forEach(doc => {
+                batch.delete(doc.ref);
+            });
+            await batch.commit();
+        } catch (e) {
+            console.log('Error deleting existing:', e);
+        }
+    }
+    
+    // Get all active customers with their attendance for today
+    const customers = await db.customers.where('status').equals('active').toArray();
+    const attendance = await db.attendance.where('date').equals(today).toArray();
+    
+    const batch = fs.batch();
+    let publishedCount = 0;
+    
+    for (const cust of customers) {
+        const record = attendance.find(a => a.custId === cust.id && a.status === 'delivered');
+        
+        // Skip if not delivered or skipped
+        if (!record) continue;
+        
+        const driverMobile = identifiers[cust.route];
+        if (!driverMobile) continue;
+        
+        // Build inclusions string
+        let inclusions = record.inclusion || 'S1';
+        if (record.addon) inclusions += '+' + record.addon;
+        
+        // Build extra addons string
+        let extraAddons = '';
+        if (record.extraAddons && Array.isArray(record.extraAddons)) {
+            extraAddons = record.extraAddons.join(',');
+        }
+        
+        const docRef = fs.collection('delivery_customers').doc();
+        batch.set(docRef, {
+            date: today,
+            custId: cust.id,
+            route: cust.route,
+            driverMobile: driverMobile,
+            name: cust.name,
+            nickname: cust.nickname || cust.name,
+            inclusions: inclusions,
+            extraAddons: extraAddons,
+            isDelivered: false,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        publishedCount++;
+    }
+    
+    if (publishedCount === 0) {
+        alert('No delivered customers to publish. Mark customers as delivered first.');
+        return;
+    }
+    
+    try {
+        await batch.commit();
+        alert(`✅ Published ${publishedCount} customers to delivery routes!`);
+        document.getElementById('routeShareModal').classList.add('hidden');
+    } catch (e) {
+        console.error('Publish error:', e);
+        alert('❌ Failed to publish. Check internet connection.');
+    }
+}
+
+// Pull delivery updates from Firestore
+async function pullDeliveryUpdates() {
+    const today = getToday();
+    const token = localStorage.getItem('grabb_sync_token');
+    if (!token) return; // Only pull if synced
+    
+    try {
+        const snapshot = await fs.collection('delivery_customers')
+            .where('date', '==', today)
+            .get();
+        
+        if (snapshot.empty) return;
+        
+        let updatedCount = 0;
+        
+        for (const doc of snapshot.docs) {
+            const data = doc.data();
+            if (!data.isDelivered) continue;
+            
+            // Check if we have a local delivered record
+            const existing = await db.attendance
+                .where({ custId: data.custId, date: today })
+                .first();
+            
+            // If not delivered locally but delivered in cloud, update local
+            if (!existing || existing.status !== 'delivered') {
+                const customer = await db.customers.get(data.custId);
+                if (!customer) continue;
+                
+                const hasPendingAddon = customer.pendingAddonDate === today;
+                const finalAddons = hasPendingAddon ? 1 : 0;
+                const inclusion = customer.plan && customer.plan.toLowerCase().includes('couple') ? 'S2' : 'S1';
+                
+                await db.attendance.add({
+                    custId: data.custId,
+                    date: today,
+                    status: 'delivered',
+                    addons: finalAddons,
+                    isWalkIn: false,
+                    quantity: 1,
+                    inclusion: inclusion,
+                    addon: null,
+                    coupleAddon1: null,
+                    coupleAddon2: null,
+                    extraAddons: []
+                });
+                
+                await db.customers.update(data.custId, { pendingAddonDate: null });
+                updatedCount++;
+            }
+        }
+        
+        if (updatedCount > 0) {
+            console.log(`Pulled ${updatedCount} delivery updates from cloud`);
+            renderApp();
+        }
+        
+        // Clean up old records (>60 days)
+        await cleanupOldDeliveryRecords();
+        
+    } catch (e) {
+        console.log('Error pulling delivery updates:', e);
+    }
+}
+
+// Clean up old delivery records (>60 days)
+async function cleanupOldDeliveryRecords() {
+    try {
+        const sixtyDaysAgo = new Date();
+        sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+        const cutoffDate = sixtyDaysAgo.toISOString().split('T')[0];
+        
+        const oldRecords = await fs.collection('delivery_customers')
+            .where('date', '<', cutoffDate)
+            .get();
+        
+        if (oldRecords.empty) return;
+        
+        const batch = fs.batch();
+        oldRecords.docs.forEach(doc => {
+            batch.delete(doc.ref);
+        });
+        await batch.commit();
+        console.log(`Cleaned up ${oldRecords.size} old delivery records`);
+    } catch (e) {
+        console.log('Error cleaning up old records:', e);
+    }
 }
 async function hardRefreshApp() {
     // Show a confirmation so the user doesn't do it by mistake

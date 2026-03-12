@@ -528,13 +528,41 @@
         class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex items-center justify-center p-6">
         <div class="bg-white rounded-[2rem] w-full max-w-xs overflow-hidden shadow-2xl">
             <div class="p-6">
-                <h3 class="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 text-center">Select Route to
-                    Share</h3>
-
-                <div id="routeOptionsList" class="space-y-2 mb-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-xs font-black text-gray-400 uppercase tracking-widest">Select Route to Share</h3>
+                    <button onclick="openDriverNumbersModal()" class="text-xs text-blue-500 font-bold underline">Set Drivers</button>
                 </div>
 
+                <div id="routeOptionsList" class="space-y-2 mb-4">
+                </div>
+
+                <button onclick="publishRoutes()" id="publishRoutesBtn" class="w-full bg-green-500 hover:bg-green-600 text-white py-3 rounded-xl font-bold text-sm mb-3">
+                    Publish Routes
+                </button>
+
                 <button onclick="document.getElementById('routeShareModal').classList.add('hidden')"
+                    class="w-full py-3 text-gray-400 font-bold text-xs uppercase tracking-widest">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Driver Numbers Modal -->
+    <div id="driverNumbersModal"
+        class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-[120] flex items-center justify-center p-6">
+        <div class="bg-white rounded-[2rem] w-full max-w-xs overflow-hidden shadow-2xl">
+            <div class="p-6">
+                <h3 class="text-xs font-black text-gray-400 uppercase tracking-widest mb-4 text-center">Set Driver Mobile Numbers</h3>
+                
+                <div id="driverNumbersList" class="space-y-3 mb-6 max-h-[60vh] overflow-y-auto">
+                </div>
+
+                <button onclick="saveDriverNumbers()" class="w-full bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-xl font-bold text-sm mb-3">
+                    Save
+                </button>
+
+                <button onclick="document.getElementById('driverNumbersModal').classList.add('hidden')"
                     class="w-full py-3 text-gray-400 font-bold text-xs uppercase tracking-widest">
                     Cancel
                 </button>

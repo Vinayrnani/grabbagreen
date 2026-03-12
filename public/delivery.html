@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<link rel="manifest" href="manifest.json">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Grabb A Green - Delivery</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+    <script>
+        // Simple XOR-based encryption for Firebase config
+        const DELIVERY_KEY = 'GRABB-DELIVERY';
+        
+        // Encrypted Firebase config
+        const ENCRYPTED_CONFIG = {
+            apiKey: "Bhs7IxFUBjEeKz8tZyMvZBA3GF00d3V7IDA1LyhlFzckYRcgAiZi",
+            authDomain: "ICAgICBMIzcpLDhoYzt2NyVsJEQ2IC4oJSAzKTd8Ii0v",
+            projectId: "ICAgICBMIzcpLDhoYzt2NyU=",
+            storageBucket: "ICAgICBMIzcpLDhoYzt2NyVsJEQ2IC4oJSAhLSggICUnAyU1PA==",
+            messagingSenderId: "cGBzcnYbcHB4fW92",
+            appId: "dmh2cHAdcHN4fGJxa2p9JSQgeEkhJHh8bnFjbiVqICAhHnZwLXtvdmY="
+        };
+        
+        function decrypt(str) {
+            if (!str) return str;
+            let result = '';
+            try {
+                const decoded = atob(str);
+                for (let i = 0; i < decoded.length; i++) {
+                    result += String.fromCharCode(decoded.charCodeAt(i) ^ DELIVERY_KEY.charCodeAt(i % DELIVERY_KEY.length));
+                }
+            } catch(e) {
+                console.error('Decrypt error:', e);
+                return str;
+            }
+            return result;
+        }
+        
+        const firebaseConfig = {
+            apiKey: decrypt(ENCRYPTED_CONFIG.apiKey),
+            authDomain: decrypt(ENCRYPTED_CONFIG.authDomain),
+            projectId: decrypt(ENCRYPTED_CONFIG.projectId),
+            storageBucket: decrypt(ENCRYPTED_CONFIG.storageBucket),
+            messagingSenderId: decrypt(ENCRYPTED_CONFIG.messagingSenderId),
+            appId: decrypt(ENCRYPTED_CONFIG.appId)
+        };
+        
+        firebase.initializeApp(firebaseConfig);
+        const fs = firebase.firestore();
+        
+        // Local IndexedDB for offline
+        const deliveryDB = new Dexie("DeliveryDB");
+        deliveryDB.version(1).stores({
+            deliveries: '++id, custId, date, route, driverMobile, isDelivered, updatedAt'
+        });
+    </script>
+</head>
+
+<body class="bg-gray-100 font-sans select-none h-screen overflow-hidden flex flex-col">
+    
+    <!-- Login Screen -->
+    <div id="loginScreen" class="fixed inset-0 bg-white z-[100] flex items-center justify-center p-6">
+        <div class="w-full max-w-sm">
+            <div class="text-center mb-8">
+                <div class="bg-green-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <span class="text-4xl">🥗</span>
+                </div>
+                <h1 class="text-2xl font-black text-gray-800">Grabb A Green</h1>
+                <p class="text-gray-500 font-bold text-sm mt-1">Delivery App</p>
+            </div>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Your Mobile Number</label>
+                    <input type="tel" id="driverMobile" 
+                        placeholder="Enter mobile number"
+                        class="w-full border border-gray-200 rounded-xl px-4 py-4 text-lg font-bold text-center">
+                </div>
+                
+                <button onclick="loginDelivery()" 
+                    class="w-full bg-green-500 hover:bg-green-600 text-white py-4 rounded-xl font-bold text-lg active:scale-95 transition-all">
+                    Get My Route
+                </button>
+            </div>
+            
+            <p class="text-center text-gray-400 text-xs mt-8">
+                Ask your manager for your mobile number
+            </p>
+        </div>
+    </div>
+
+    <!-- Main App Header -->
+    <header id="appHeader" class="hidden bg-white border-b border-gray-100 sticky top-0 z-50">
+        <div class="flex justify-center" style="background-color: #f6f7f1;">
+            <img src="logo.jpg" alt="Grabb A Green" class="h-10 w-auto object-contain">
+        </div>
+        
+        <div class="flex items-center justify-between px-4 py-2">
+            <button onclick="logoutDelivery()" class="text-gray-500 text-sm font-bold">
+                ← Logout
+            </button>
+            
+            <div class="flex items-center gap-2">
+                <span id="routeBadge" class="bg-gray-800 text-white text-xs px-3 py-1 rounded-full font-bold"></span>
+                <span id="deliveryCount" class="text-xs font-bold text-gray-500">0/0</span>
+            </div>
+            
+            <button onclick="refreshDelivery()" class="text-gray-500">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+            </button>
+        </div>
+    </header>
+
+    <!-- Delivery List -->
+    <main id="deliveryList" class="hidden flex-1 overflow-y-auto p-4 pb-24">
+        <div id="deliveryCards" class="space-y-3">
+        </div>
+        
+        <!-- Empty State -->
+        <div id="emptyState" class="hidden text-center py-12">
+            <div class="text-6xl mb-4">📭</div>
+            <h3 class="text-lg font-bold text-gray-700">No deliveries assigned</h3>
+            <p class="text-gray-500 text-sm mt-1">Check with your manager</p>
+        </div>
+    </main>
+
+    <!-- Loading -->
+    <div id="loadingIndicator" class="hidden fixed inset-0 bg-white/80 z-[90] flex items-center justify-center">
+        <div class="text-center">
+            <div class="animate-spin w-10 h-10 border-4 border-green-500 border-t-transparent rounded-full mx-auto"></div>
+            <p class="text-gray-500 font-bold text-sm mt-2">Loading...</p>
+        </div>
+    </div>
+
+    <!-- Action Menu -->
+    <div id="actionMenu" class="hidden fixed inset-0 bg-black/40 z-[200] items-center justify-center p-6">
+        <div class="bg-white rounded-2xl w-full max-w-xs overflow-hidden shadow-2xl">
+            <div class="p-4">
+                <h3 class="text-center font-bold text-gray-700 mb-4">Actions</h3>
+                <button onclick="resetDelivery()" class="w-full bg-red-500 hover:bg-red-600 text-white py-3 rounded-xl font-bold mb-2">
+                    Reset Attendance
+                </button>
+                <button onclick="closeActionMenu()" class="w-full bg-gray-100 text-gray-600 py-3 rounded-xl font-bold">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="delivery.js"></script>
+</body>
+</html>

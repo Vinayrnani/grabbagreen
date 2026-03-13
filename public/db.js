@@ -32,15 +32,10 @@ db.version(17).stores({
         if (record.advanceBalance === undefined) record.advanceBalance = 0;
     });
 }).upgrade(tx => {
-    // v17: Add startDate to customers - use createdAt or today as default
-    // First attendance query happens in edit modal for accuracy
+    // v17: Add startDate field to customers (set to null, will be populated by app.js init)
     return tx.table('customers').toCollection().modify(record => {
-        if (!record.startDate) {
-            if (record.createdAt) {
-                record.startDate = record.createdAt.split('T')[0];
-            } else {
-                record.startDate = new Date().toISOString().split('T')[0];
-            }
+        if (record.startDate === undefined) {
+            record.startDate = null;
         }
     });
 });

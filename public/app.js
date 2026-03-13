@@ -970,6 +970,12 @@ async function init() {
     loadPendingInclusions();
     loadPendingAddons();
     
+    // Clear old localStorage route identifiers if exists
+    localStorage.removeItem('routeIdentifiers');
+    
+    // Initialize startDate for customers if missing
+    await initializeCustomerStartDates();
+    
     // Check if daily addon enforcement is enabled
     const enforceSetting = localStorage.getItem('enforceDailyAddons');
     const enforceDailyAddons = enforceSetting === 'true'; // Default to false (OFF)
@@ -1810,19 +1816,16 @@ async function openEditModal(custId) {
     
     document.getElementById('editPlan').value = cust.plan;
     
-    // Load startDate - query first attendance to use as default
-    const firstAttendance = await db.attendance.where('custId').equals(custId).first();
-    const firstAttendanceDate = firstAttendance?.date;
-    
-    // Use stored startDate, or first attendance date, or today as fallback
-    const startDate = cust.startDate || firstAttendanceDate || getToday();
+    // Load startDate from DB (already populated by initializeCustomerStartDates on init)
+    const startDate = cust.startDate || getToday();
     document.getElementById('editStartDate').value = startDate;
     
+    // Show first attendance info if available
     const infoEl = document.getElementById('editStartDateInfo');
-    if (firstAttendanceDate) {
-        infoEl.textContent = `First attendance: ${firstAttendanceDate}`;
+    if (cust.startDate) {
+        infoEl.textContent = `Start date`;
     } else {
-        infoEl.textContent = 'No attendance records yet';
+        infoEl.textContent = 'No start date set';
     }
     
     // Set toggle state for account status
@@ -1894,9 +1897,14 @@ async function saveCustomerEdit() {
         return;
     }
     
-    // Validate: cannot be before first attendance
-    if (firstAttendanceDate && newStartDate < firstAttendanceDate) {
-        alert(`Cannot set start date before first attendance (${firstAttendanceDate}). Resetting to first attendance date.`);
+    // Validate: cannot be before any attendance
+    const attendanceBefore = await db.attendance
+        .where('custId').equals(currentEditingId)
+        .and(r => r.date < newStartDate)
+        .first();
+    
+    if (attendanceBefore) {
+        alert(`Cannot set start date. There are attendance records before ${newStartDate} (first: ${attendanceBefore.date}).`);
         document.getElementById('editStartDate').value = firstAttendanceDate;
         document.getElementById('editStartDateInfo').textContent = `First attendance: ${firstAttendanceDate}`;
         return;
@@ -2799,6 +2807,31 @@ async function processRouteShare(route) {
 
 // --- DELIVERY ROUTES MANAGEMENT ---
 
+// Initialize startDate for all customers from first attendance
+async function initializeCustomerStartDates() {
+    const customers = await db.customers.toArray();
+    let updated = 0;
+    
+    for (const cust of customers) {
+        if (cust.startDate) continue; // Already has startDate
+        
+        // Find first attendance
+        const firstAtt = await db.attendance
+            .where('custId').equals(cust.id)
+            .first();
+        
+        if (firstAtt) {
+            await db.customers.update(cust.id, { startDate: firstAtt.date });
+            updated++;
+        }
+    }
+    
+    if (updated > 0) {
+        console.log(`Initialized startDate for ${updated} customers`);
+    }
+    return updated;
+}
+
 // Get route identifiers from local settings DB (master record)
 async function getRouteIdentifiers() {
     const setting = await db.settings.get('routeIdentifiers');
@@ -2842,20 +2875,8 @@ async function openDriverNumbersModal() {
     const routes = [...new Set((await db.customers.toArray()).map(c => c.route))].filter(Boolean);
     const identifiers = await getRouteIdentifiers();
     
-    // Also try to load from Firestore as fallback
-    try {
-        const doc = await fs.collection('delivery_settings').doc('route_identifiers').get();
-        if (doc.exists && doc.data().identifiers) {
-            const cloudIds = doc.data().identifiers;
-            for (const route of routes) {
-                if (!identifiers[route] && cloudIds[route]) {
-                    identifiers[route] = cloudIds[route];
-                }
-            }
-        }
-    } catch (e) {
-        console.log('Could not load from cloud:', e);
-    }
+    // Local settings DB is master - only use that
+    // Don't load from Firestore as fallback (local is source of truth)
     
     const container = document.getElementById('driverNumbersList');
     container.innerHTML = routes.map(route => `
@@ -3090,8 +3111,9 @@ async function pullDeliveryUpdates() {
             
             // Check each active customer
             for (const customer of activeCustomers) {
-                const startDate = customer.startDate || getToday();
-                if (startDate > dateStr) continue; // Skip customers who haven't started yet
+                // Use stored startDate from DB (populated by initializeCustomerStartDates)
+                if (!customer.startDate) continue; // Skip if no startDate
+                if (customer.startDate > dateStr) continue; // Skip customers who haven't started yet
                 
                 const hasLocal = localCustIds.includes(customer.id);
                 const hasCloud = cloudCustIds.includes(customer.id);
@@ -3146,20 +3168,12 @@ async function pullDeliveryUpdates() {
                     missingByDate[dateStr].push(customer.nickname || customer.name);
                 }
             }
-            
-            console.log(`Pulled ${pulledToday} records for ${dateStr}`);
-        }
-        
-        if (totalPulled > 0) {
-            console.log(`Total pulled: ${totalPulled}`);
-            renderApp();
         }
         
         // Clean up old records
         await cleanupOldDeliveryRecords();
         
         // Filter out today from missing - only show past dates
-        const today = getToday();
         const pastMissing = {};
         Object.keys(missingByDate).forEach(dateStr => {
             if (dateStr !== today) {

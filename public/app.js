@@ -3095,14 +3095,15 @@ async function pullDeliveryUpdates() {
                         .get();
                     
                     cloudRecords = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
-                })).filter(r => 
-                    validMobiles.includes(r.driverMobile) && 
-                    r.isDelivered
-                );
-            } catch (e) {
-                console.log('Error fetching cloud records for', dateStr, e);
+                        id: doc.id,
+                        ...doc.data()
+                    })).filter(r => 
+                        validMobiles.includes(r.driverMobile) && 
+                        r.isDelivered
+                    );
+                } catch (e) {
+                    console.log('Error fetching cloud records for', dateStr, e);
+                }
             }
             
             const cloudCustIds = cloudRecords.map(r => r.custId);

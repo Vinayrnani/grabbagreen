@@ -3077,9 +3077,6 @@ async function pullDeliveryUpdates() {
     const token = localStorage.getItem('grabb_sync_token');
     if (!token) return;
     
-    // Only show modal when viewing today
-    const isToday = (selectedDate || getToday()) === today;
-    
     const identifiers = await getRouteIdentifiers();
     const validMobiles = Object.values(identifiers);
     const hasRouteMobiles = validMobiles.length > 0;
@@ -3204,8 +3201,8 @@ async function pullDeliveryUpdates() {
             }
         });
         
-        // Show modal only when viewing today and there are missing past dates
-        if (isToday && Object.keys(pastMissing).length > 0) {
+        // Show modal when there are missing past dates
+        if (Object.keys(pastMissing).length > 0) {
             showMissingAttendanceModal(pastMissing);
         }
         

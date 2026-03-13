@@ -2955,77 +2955,153 @@ async function publishRoutes() {
 async function pullDeliveryUpdates() {
     const today = getToday();
     const token = localStorage.getItem('grabb_sync_token');
-    if (!token) return; // Only pull if synced
+    if (!token) return;
     
-    // Get local route identifiers
+    // Only show modal when viewing today
+    const isToday = (selectedDate || getToday()) === today;
+    
     const identifiers = await getRouteIdentifiers();
     const validMobiles = Object.values(identifiers);
     
-    if (validMobiles.length === 0) return; // No drivers set
+    if (validMobiles.length === 0) return;
+    
+    const missingByDate = {};
+    let totalPulled = 0;
     
     try {
-        const snapshot = await fs.collection('delivery_customers')
-            .where('date', '==', today)
-            .get();
-        
-        if (snapshot.empty) return;
-        
-        let updatedCount = 0;
-        
-        for (const doc of snapshot.docs) {
-            const data = doc.data();
+        // Check past 7 days
+        for (let i = 0; i < 7; i++) {
+            const checkDate = new Date();
+            checkDate.setDate(checkDate.getDate() - i);
+            const dateStr = checkDate.toISOString().split('T')[0];
             
-            // Check 1: Is this driver in our local route identifiers?
-            if (!validMobiles.includes(data.driverMobile)) continue;
+            // Get active customers
+            const activeCustomers = await db.customers.where('status').equals('active').toArray();
             
-            // Check 2: Is it delivered?
-            if (!data.isDelivered) continue;
+            // Get local attendance for this date
+            const localAttendance = await db.attendance.where('date').equals(dateStr).toArray();
+            const localCustIds = localAttendance.map(a => a.custId);
             
-            // Check 3: Does customer exist in local DB?
-            const customer = await db.customers.get(data.custId);
-            if (!customer) continue;
-            
-            // Check 4: Chef entries always win - only pull if no local record exists
-            const existing = await db.attendance
-                .where({ custId: data.custId, date: today })
-                .first();
-            
-            // Only add if no existing record - chef's marking takes precedence
-            if (!existing) {
-                const hasPendingAddon = customer.pendingAddonDate === today;
-                const finalAddons = hasPendingAddon ? 1 : 0;
-                const inclusion = customer.plan && customer.plan.toLowerCase().includes('couple') ? 'S2' : 'S1';
+            // Get commondb records for this date
+            let cloudRecords = [];
+            try {
+                const snapshot = await fs.collection('delivery_customers')
+                    .where('date', '==', dateStr)
+                    .get();
                 
-                await db.attendance.add({
-                    custId: data.custId,
-                    date: today,
-                    status: 'delivered',
-                    addons: finalAddons,
-                    isWalkIn: false,
-                    quantity: 1,
-                    inclusion: inclusion,
-                    addon: null,
-                    coupleAddon1: null,
-                    coupleAddon2: null,
-                    extraAddons: []
-                });
-                
-                await db.customers.update(data.custId, { pendingAddonDate: null });
-                updatedCount++;
+                cloudRecords = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                })).filter(r => 
+                    validMobiles.includes(r.driverMobile) && 
+                    r.isDelivered
+                );
+            } catch (e) {
+                console.log('Error fetching cloud records for', dateStr, e);
             }
+            
+            const cloudCustIds = cloudRecords.map(r => r.custId);
+            
+            let pulledToday = 0;
+            
+            // Check each active customer
+            for (const customer of activeCustomers) {
+                const hasLocal = localCustIds.includes(customer.id);
+                const hasCloud = cloudCustIds.includes(customer.id);
+                
+                // If no local attendance but has cloud delivery, pull it
+                if (!hasLocal && hasCloud) {
+                    const cloudRec = cloudRecords.find(r => r.custId === customer.id);
+                    
+                    await db.attendance.add({
+                        custId: customer.id,
+                        date: dateStr,
+                        status: 'delivered',
+                        addons: 0,
+                        isWalkIn: false,
+                        quantity: 1,
+                        inclusion: customer.plan && customer.plan.toLowerCase().includes('couple') ? 'S2' : 'S1',
+                        addon: null,
+                        coupleAddon1: null,
+                        coupleAddon2: null,
+                        extraAddons: []
+                    });
+                    
+                    await db.customers.update(customer.id, { pendingAddonDate: null });
+                    pulledToday++;
+                    totalPulled++;
+                }
+                
+                // Track missing: no local AND no cloud
+                if (!hasLocal && !hasCloud) {
+                    if (!missingByDate[dateStr]) {
+                        missingByDate[dateStr] = [];
+                    }
+                    missingByDate[dateStr].push(customer.nickname || customer.name);
+                }
+            }
+            
+            console.log(`Pulled ${pulledToday} records for ${dateStr}`);
         }
         
-        if (updatedCount > 0) {
-            console.log(`Pulled ${updatedCount} delivery updates from cloud`);
+        if (totalPulled > 0) {
+            console.log(`Total pulled: ${totalPulled}`);
             renderApp();
         }
         
-        // Clean up old records (>60 days)
+        // Clean up old records
         await cleanupOldDeliveryRecords();
+        
+        // Show modal only when viewing today and there are missing
+        if (isToday && Object.keys(missingByDate).length > 0) {
+            showMissingAttendanceModal(missingByDate);
+        }
         
     } catch (e) {
         console.log('Error pulling delivery updates:', e);
     }
+}
+
+function showMissingAttendanceModal(missingByDate) {
+    const modal = document.getElementById('missingAttendanceModal');
+    const container = document.getElementById('missingAttendanceList');
+    
+    const dateLabels = {
+        0: 'Today',
+        1: 'Yesterday'
+    };
+    
+    let html = '';
+    
+    Object.keys(missingByDate).sort().reverse().forEach(dateStr => {
+        const customers = missingByDate[dateStr];
+        const dateObj = new Date(dateStr);
+        const dayDiff = Math.floor((new Date() - dateObj) / (1000 * 60 * 60 * 24));
+        const label = dateLabels[dayDiff] || dateStr;
+        
+        html += `
+            <div class="mb-4">
+                <button onclick="goToDate('${dateStr}')" class="flex items-center gap-2 text-blue-600 font-bold">
+                    ← ${label}
+                </button>
+                <div class="ml-4 mt-1">
+                    ${customers.map(name => `<div class="text-gray-600">- ${name}</div>`).join('')}
+                </div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+    modal.classList.remove('hidden');
+}
+
+function closeMissingAttendanceModal() {
+    document.getElementById('missingAttendanceModal').classList.add('hidden');
+}
+
+function goToDate(dateStr) {
+    closeMissingAttendanceModal();
+    changeAppDate(dateStr);
 }
 
 // Clean up old delivery records (>60 days)

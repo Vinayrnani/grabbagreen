@@ -350,3 +350,47 @@ Syntax OK.
 
 ## Response: Done. Deploying now.
 
+---
+
+## Prompt: what happens if the chef didnt open or refresh the page until next day after publishing?
+
+## Response: Explained the issue - current logic only pulls today's records. Proposed solution to check past 7 days and pull missing deliveries.
+
+---
+
+## Prompt: so before sync check if there are any pending records in local upto a week, then check in commondb if those records are available, if any of them are missing show a closable modal notifying the chef saying these customers were not marked on these dates
+
+## Response: Implemented:
+- Pulls from past 7 days (not just today)
+- Checks each active customer against local attendance and commondb
+- Pulls missing deliveries automatically
+- Shows modal with missing customers only when viewing TODAY
+- Modal shows: date + customer names + arrow to navigate
+
+---
+
+## Prompt: the modal should say like Attendance is missing. on date 12 Mar 2026(Yesterday) list of the customer names and a button to go to that date to correct attendance.. also this modal shows only when the date selector has today as in if the customer is in other date shouldnt show
+
+## Response: Updated modal design to match requirements.
+
+---
+
+## Prompt: title Attendance is missing modal content is dates then list of customers with indentation and a arrow mark button next to date to goto that date
+
+## Response: Final modal design confirmed and implemented.
+
+---
+
+## Prompt: ok implement both
+
+## Response: Implemented and deployed:
+1. Pull missing deliveries from past 7 days
+2. Show modal with missing attendance (date + customer names + arrow to navigate)
+3. Only shows when date selector = TODAY
+
+---
+
+## Prompt: ppp
+
+## Response: (About to commit and push)
+

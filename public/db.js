@@ -3,8 +3,8 @@
 
 const db = new Dexie("SaladDB");
 
-db.version(16).stores({
-    customers: '++id, name, nickname, route, plan, status, vacationUntil, pendingAddonDate, mobile, discount, paymentType, advanceBalance, createdAt, updatedAt',
+db.version(17).stores({
+    customers: '++id, name, nickname, route, plan, status, vacationUntil, startDate, pendingAddonDate, mobile, discount, paymentType, advanceBalance, createdAt, updatedAt',
     advances: '++id, custId, amount, date, invoiceNumber, notes, createdAt',
     attendance: '++id, [custId+date], date, status, addons, isWalkIn, quantity, isVacation, inclusion, addon, coupleAddon1, coupleAddon2, extraAddons, createdAt, updatedAt',
     logs: '++id, timestamp, action',
@@ -30,6 +30,18 @@ db.version(16).stores({
     return tx.table('customers').toCollection().modify(record => {
         if (!record.paymentType) record.paymentType = 'postpaid';
         if (record.advanceBalance === undefined) record.advanceBalance = 0;
+    });
+}).upgrade(tx => {
+    // v17: Add startDate to customers - use createdAt or today as default
+    // First attendance query happens in edit modal for accuracy
+    return tx.table('customers').toCollection().modify(record => {
+        if (!record.startDate) {
+            if (record.createdAt) {
+                record.startDate = record.createdAt.split('T')[0];
+            } else {
+                record.startDate = new Date().toISOString().split('T')[0];
+            }
+        }
     });
 });
 

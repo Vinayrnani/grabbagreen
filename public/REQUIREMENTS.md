@@ -401,3 +401,42 @@ payments: '++id, invoiceId, amount, date, method, notes'
 │           Eat Green, Feel Great.            │
 └─────────────────────────────────────────┘
 ```
+
+---
+
+## Start Date Feature
+
+### Purpose
+Track when each customer started their subscription to properly filter attendance records.
+
+### Database
+- **Field**: `startDate` in customers table (YYYY-MM-DD format)
+- **v17 Migration**: Set startDate = first attendance date for existing customers
+- If no attendance exists → set to `createdAt` date or today
+
+### Add Customer Modal
+- Date picker field for startDate
+- Default: today (current system date)
+- Allow: future dates (for advance booking)
+
+### Edit Customer Modal
+- Date picker with info text showing first attendance date
+- **Validation**: 
+  - If selected date < first attendance date → hard block
+  - Alert: "Cannot set start date before first attendance (YYYY-MM-DD)"
+  - Reset input to first attendance date
+
+### Attendance Tab Filtering
+- Only show customers where `startDate <= viewDate`
+- Customer starting today will NOT appear in yesterday's list
+- Missing attendance check only considers started customers
+
+### Behaviors
+
+| Scenario | Result |
+|----------|--------|
+| New customer added today | startDate = today, shows in today's list |
+| Customer starts next week | Future date → not shown until then |
+| Existing customer | startDate = first attendance date |
+| Yesterday's view | Customer starting today NOT shown |
+| Edit to past date | Hard block - reset to first attendance + warning |

@@ -619,7 +619,9 @@ async function renderList() {
     let activeCustomers = allCustomers.filter(c => {
         const hasRecord = attendanceMap.has(c.id);
         const isCurrentlyActive = c.status !== 'inactive';
-        return isCurrentlyActive || hasRecord;
+        const startDate = c.startDate || getToday();
+        const isStarted = startDate <= viewDate; // Only show if customer has started
+        return (isCurrentlyActive || hasRecord) && isStarted;
     });
 
     // Update filter pills with counts (before applying package filter)
@@ -635,7 +637,9 @@ async function renderList() {
     const inactiveCustomers = allCustomers.filter(c => {
         const hasRecord = attendanceMap.has(c.id);
         const isCurrentlyInactive = c.status === 'inactive';
-        return isCurrentlyInactive && !hasRecord;
+        const startDate = c.startDate || getToday();
+        const isStarted = startDate <= viewDate;
+        return isCurrentlyInactive && !hasRecord && isStarted;
     });
     
     // 2. Pre-calculate couple addon counts for the current month
@@ -1067,6 +1071,7 @@ function closeModal() {
 
 // --- NEW FEATURE: ADD NEW SUBSCRIBER ---
 function showAddCustomer() {
+    const today = getToday();
     const html = `
         <h2 class="text-xl font-bold mb-4">Add New Subscriber</h2>
         <div class="space-y-4">
@@ -1086,6 +1091,11 @@ function showAddCustomer() {
                 <option value="Couple">Couple (₹8999)</option>
                 <option value="MealBox">Meal Box (₹7800)</option>
             </select>
+            
+            <div>
+                <label class="text-xs font-bold text-gray-500 uppercase block mb-1">Start Date</label>
+                <input id="newCustStartDate" type="date" value="${today}" class="w-full border p-3 rounded-lg">
+            </div>
             
             <div class="border-t pt-4">
                 <label class="text-xs font-bold text-gray-500 uppercase block mb-2">Payment Type</label>
@@ -1116,6 +1126,7 @@ function showAddCustomer() {
         const discount = parseFloat(document.getElementById('newCustDiscount').value) || 0;
         const route = document.getElementById('newCustRoute').value;
         const plan = document.getElementById('newCustPlan').value;
+        const startDate = document.getElementById('newCustStartDate').value || getToday();
         const paymentType = document.querySelector('input[name="newCustPaymentType"]:checked')?.value || 'postpaid';
         const advanceAmount = parseFloat(document.getElementById('newCustAdvance')?.value) || 0;
 
@@ -1133,6 +1144,7 @@ function showAddCustomer() {
             discount,
             route,
             plan,
+            startDate,
             status: 'active',
             vacationUntil: null,
             paymentType,
@@ -1798,6 +1810,21 @@ async function openEditModal(custId) {
     
     document.getElementById('editPlan').value = cust.plan;
     
+    // Load startDate - query first attendance to use as default
+    const firstAttendance = await db.attendance.where('custId').equals(custId).first();
+    const firstAttendanceDate = firstAttendance?.date;
+    
+    // Use stored startDate, or first attendance date, or today as fallback
+    const startDate = cust.startDate || firstAttendanceDate || getToday();
+    document.getElementById('editStartDate').value = startDate;
+    
+    const infoEl = document.getElementById('editStartDateInfo');
+    if (firstAttendanceDate) {
+        infoEl.textContent = `First attendance: ${firstAttendanceDate}`;
+    } else {
+        infoEl.textContent = 'No attendance records yet';
+    }
+    
     // Set toggle state for account status
     const statusToggle = document.getElementById('editStatusToggle');
     const statusText = document.getElementById('editStatusText');
@@ -1856,6 +1883,25 @@ async function saveCustomerEdit() {
     const cust = currentEditingCust || await db.customers.get(currentEditingId);
     const paymentType = document.querySelector('input[name="editPaymentType"]:checked')?.value || 'postpaid';
     
+    // Validate startDate - query first attendance
+    const firstAttendance = await db.attendance.where('custId').equals(currentEditingId).first();
+    const firstAttendanceDate = firstAttendance?.date;
+    const newStartDate = document.getElementById('editStartDate').value;
+    
+    // Validate: empty or invalid date
+    if (!newStartDate || !/^\d{4}-\d{2}-\d{2}$/.test(newStartDate)) {
+        alert('Please enter a valid start date.');
+        return;
+    }
+    
+    // Validate: cannot be before first attendance
+    if (firstAttendanceDate && newStartDate < firstAttendanceDate) {
+        alert(`Cannot set start date before first attendance (${firstAttendanceDate}). Resetting to first attendance date.`);
+        document.getElementById('editStartDate').value = firstAttendanceDate;
+        document.getElementById('editStartDateInfo').textContent = `First attendance: ${firstAttendanceDate}`;
+        return;
+    }
+    
     // Preserve existing advance balance
     const advanceBalance = cust.advanceBalance || 0;
 
@@ -1864,6 +1910,7 @@ async function saveCustomerEdit() {
         nickname: document.getElementById('editNickname').value,
         route: document.querySelector('input[name="editRoute"]:checked')?.value || 'A',
         plan: document.getElementById('editPlan').value,
+        startDate: newStartDate || getToday(),
         status: document.getElementById('editStatusToggle').checked ? 'active' : 'inactive',
         mobile: document.getElementById('editmobile').value,
         discount: parseFloat(document.getElementById('editDiscount').value) || 0,
@@ -1888,12 +1935,15 @@ async function saveAndShareAdvanceFromEdit() {
     const cust = currentEditingCust || await db.customers.get(currentEditingId);
     const plan = document.getElementById('editPlan').value;
     
+    const newStartDate = document.getElementById('editStartDate').value;
+    
     // Save the profile update - overwrite advance amount (replace existing)
     const update = {
         name: document.getElementById('editFullName').value,
         nickname: document.getElementById('editNickname').value,
         route: document.querySelector('input[name="editRoute"]:checked')?.value || 'A',
         plan: plan,
+        startDate: newStartDate || getToday(),
         status: document.getElementById('editStatusToggle').checked ? 'active' : 'inactive',
         mobile: document.getElementById('editmobile').value,
         discount: parseFloat(document.getElementById('editDiscount').value) || 0,
@@ -2749,16 +2799,16 @@ async function processRouteShare(route) {
 
 // --- DELIVERY ROUTES MANAGEMENT ---
 
-// Get route identifiers from localStorage or Firestore
+// Get route identifiers from local settings DB (master record)
 async function getRouteIdentifiers() {
-    let stored = localStorage.getItem('routeIdentifiers');
-    if (stored) {
-        return JSON.parse(stored);
+    const setting = await db.settings.get('routeIdentifiers');
+    if (setting && setting.value) {
+        return setting.value;
     }
     return {};
 }
 
-// Save route identifiers to localStorage and Firestore
+// Save route identifiers to local settings DB (master record)
 async function saveDriverNumbers() {
     const identifiers = {};
     const routes = [...new Set((await db.customers.toArray()).map(c => c.route))].filter(Boolean);
@@ -2770,9 +2820,10 @@ async function saveDriverNumbers() {
         }
     }
     
-    localStorage.setItem('routeIdentifiers', JSON.stringify(identifiers));
+    // Save to local settings DB (master record)
+    await db.settings.put({ id: 'routeIdentifiers', value: identifiers });
     
-    // Also save to Firestore for cross-device access
+    // Also sync to Firestore for delivery app access
     try {
         await fs.collection('delivery_settings').doc('route_identifiers').set({
             identifiers: identifiers,
@@ -2791,7 +2842,7 @@ async function openDriverNumbersModal() {
     const routes = [...new Set((await db.customers.toArray()).map(c => c.route))].filter(Boolean);
     const identifiers = await getRouteIdentifiers();
     
-    // Also try to load from Firestore
+    // Also try to load from Firestore as fallback
     try {
         const doc = await fs.collection('delivery_settings').doc('route_identifiers').get();
         if (doc.exists && doc.data().identifiers) {
@@ -3039,6 +3090,9 @@ async function pullDeliveryUpdates() {
             
             // Check each active customer
             for (const customer of activeCustomers) {
+                const startDate = customer.startDate || getToday();
+                if (startDate > dateStr) continue; // Skip customers who haven't started yet
+                
                 const hasLocal = localCustIds.includes(customer.id);
                 const hasCloud = cloudCustIds.includes(customer.id);
                 

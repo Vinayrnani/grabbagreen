@@ -3270,35 +3270,50 @@ async function hardRefreshApp() {
     try {
         // 1. Clear all named caches (where JS, CSS, and HTML are stored)
         if ('caches' in window) {
-            const cacheNames = await caches.keys();
-            await Promise.all(
-                cacheNames.map(name => caches.delete(name))
-            );
-            console.log("Caches cleared.");
+            try {
+                const cacheNames = await caches.keys();
+                await Promise.all(
+                    cacheNames.map(name => caches.delete(name))
+                );
+                console.log("Caches cleared.");
+            } catch (e) {
+                console.log("Cache clear error:", e);
+            }
         }
 
         // 2. Unregister the Service Worker
         if ('serviceWorker' in navigator) {
-            const registrations = await navigator.serviceWorker.getRegistrations();
-            for (let registration of registrations) {
-                await registration.unregister();
+            try {
+                const registrations = await navigator.serviceWorker.getRegistrations();
+                for (let registration of registrations) {
+                    await registration.unregister();
+                }
+                console.log("Service Worker unregistered.");
+            } catch (e) {
+                console.log("SW unregister error:", e);
             }
-            console.log("Service Worker unregistered.");
         }
         
         // 3. Generate new timestamp for cache-busting (works on iOS)
         const timestamp = Date.now();
         
         // 4. Navigate with cache-busting - works on all browsers including iOS
-        // Clear query params and add new timestamp to force fresh load
-        const baseUrl = window.location.protocol + '//' + window.location.host + window.location.pathname;
+        // Build URL properly for iOS PWA mode
+        const protocol = window.location.protocol || 'https:';
+        const host = window.location.host || window.location.hostname;
+        let path = window.location.pathname;
+        if (!path || path === '') {
+            path = '/index.html';
+        } else if (!path.startsWith('/')) {
+            path = '/' + path;
+        }
+        const baseUrl = protocol + '//' + host + path;
         window.location.href = baseUrl + '?_=' + timestamp;
 
     } catch (error) {
         console.error("Hard refresh failed:", error);
-        // Fallback: simple reload
-        const baseUrl = window.location.protocol + '//' + window.location.host + window.location.pathname;
-        window.location.href = baseUrl + '?_=' + Date.now();
+        // Ultimate fallback: simple navigation
+        window.location.href = '/?_=' + Date.now();
     }
 }
 

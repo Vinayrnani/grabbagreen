@@ -37,9 +37,21 @@ self.addEventListener('activate', (event) => {
 
 // Fetch Assets (Offline Support)
 self.addEventListener('fetch', (event) => {
+  // Network-first strategy: always try network first, then cache
+  // This ensures iOS gets fresh content when online
   event.respondWith(
-    caches.match(event.request).then((response) => {
-      return response || fetch(event.request);
-    })
+    fetch(event.request)
+      .then((response) => {
+        // Clone and cache the fresh response
+        const responseClone = response.clone();
+        caches.open(CACHE_NAME).then((cache) => {
+          cache.put(event.request, responseClone);
+        });
+        return response;
+      })
+      .catch(() => {
+        // If network fails, try cache
+        return caches.match(event.request);
+      })
   );
 });

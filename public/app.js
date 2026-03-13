@@ -3261,8 +3261,11 @@ async function cleanupOldDeliveryRecords() {
     }
 }
 async function hardRefreshApp() {
-    // Show a confirmation so the user doesn't do it by mistake
-    //if (!confirm("This will clear the app cache and reload. Continue?")) return;
+    // Clear ALL localStorage completely
+    localStorage.clear();
+    
+    // Also clear sessionStorage
+    sessionStorage.clear();
 
     try {
         // 1. Clear all named caches (where JS, CSS, and HTML are stored)
@@ -3282,17 +3285,20 @@ async function hardRefreshApp() {
             }
             console.log("Service Worker unregistered.");
         }
-
-        // 3. Force reload from server with a cache-busting timestamp
+        
+        // 3. Generate new timestamp for cache-busting (works on iOS)
         const timestamp = Date.now();
-        // Clear existing query params first to avoid accumulating timestamps
+        
+        // 4. Navigate with cache-busting - works on all browsers including iOS
+        // Clear query params and add new timestamp to force fresh load
         const baseUrl = window.location.protocol + '//' + window.location.host + window.location.pathname;
-        window.location.href = baseUrl + '?reload=' + timestamp;
+        window.location.href = baseUrl + '?_=' + timestamp;
 
     } catch (error) {
         console.error("Hard refresh failed:", error);
         // Fallback: simple reload
-        window.location.reload(true);
+        const baseUrl = window.location.protocol + '//' + window.location.host + window.location.pathname;
+        window.location.href = baseUrl + '?_=' + Date.now();
     }
 }
 

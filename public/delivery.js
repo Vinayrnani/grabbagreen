@@ -85,6 +85,8 @@ async function loadDeliveryRoute() {
                         nickname: data.nickname,
                         plan: data.plan || 'Regular',
                         inclusions: data.inclusions,
+                        coupleAddon1: data.coupleAddon1 || null,
+                        coupleAddon2: data.coupleAddon2 || null,
                         extraAddons: data.extraAddons,
                         isDelivered: data.isDelivered || false,
                         updatedAt: data.updatedAt ? data.updatedAt.toDate() : new Date(0),
@@ -153,6 +155,8 @@ async function loadDeliveryRoute() {
                 nickname: d.nickname,
                 plan: d.plan || 'Regular',
                 inclusions: d.inclusions,
+                coupleAddon1: d.coupleAddon1 || null,
+                coupleAddon2: d.coupleAddon2 || null,
                 extraAddons: d.extraAddons,
                 isDelivered: d.isDelivered,
                 updatedAt: d.updatedAt
@@ -205,10 +209,16 @@ function renderDeliveryCards(deliveries) {
         // Get plan badge
         const planInfo = getPlanBadge(d.plan);
         
-        // Parse inclusions - if it has + the part after is addon
+        // Parse inclusions - split by + to get all addons
         const inclusionParts = d.inclusions ? d.inclusions.split('+') : ['S1'];
         const inclusion = inclusionParts[0];
-        const addon = inclusionParts[1] || '';
+        const addons = inclusionParts.slice(1); // Get ALL addons (handles both single and couple)
+        
+        // Build addon display for all addons
+        const addonDisplay = addons.length > 0 ? addons.map(a => {
+            const isNonVeg = ['C', 'F', 'SE', 'BE'].includes(a);
+            return `<span class="text-xs px-2 py-0.5 rounded font-bold ${isNonVeg ? 'bg-red-100 text-red-700 border border-red-300' : 'bg-green-100 text-green-700 border border-green-300'}">${a}</span>`;
+        }).join(' ') : '';
         
         // Extra addons display
         const extraAddonDisplay = d.extraAddons ? d.extraAddons.split(',').map(a => {
@@ -229,7 +239,7 @@ function renderDeliveryCards(deliveries) {
                     <div class="text-sm mt-1">
                         <span class="text-black font-bold">INC:</span>
                         <span class="bg-blue-500 text-white text-xs px-2 py-0.5 rounded font-bold ml-1">${inclusion}</span>
-                        ${addon ? `<span class="text-black font-bold ml-2">Addon:</span><span class="text-xs px-2 py-0.5 rounded font-bold bg-red-100 text-red-700 border border-red-300 ml-1">${addon}</span>` : ''}
+                        ${addonDisplay ? `<span class="text-black font-bold ml-2">Addon:</span>${addonDisplay}` : ''}
                         ${extraAddonDisplay ? `<div class="mt-1"><span class="text-black font-bold">Extra:</span><span class="ml-1">${extraAddonDisplay}</span></div>` : ''}
                     </div>
                 </div>
@@ -249,7 +259,7 @@ function renderDeliveryCards(deliveries) {
                 <div class="text-sm mt-1">
                     <span class="text-black font-bold">INC:</span>
                     <span class="bg-blue-500 text-white text-xs px-2 py-0.5 rounded font-bold ml-1">${inclusion}</span>
-                    ${addon ? `<span class="text-black font-bold ml-2">Addon:</span><span class="text-xs px-2 py-0.5 rounded font-bold bg-red-100 text-red-700 border border-red-300 ml-1">${addon}</span>` : ''}
+                    ${addonDisplay ? `<span class="text-black font-bold ml-2">Addon:</span>${addonDisplay}` : ''}
                     ${extraAddonDisplay ? `<div class="mt-1"><span class="text-black font-bold">Extra:</span><span class="ml-1">${extraAddonDisplay}</span></div>` : ''}
                 </div>
             </div>

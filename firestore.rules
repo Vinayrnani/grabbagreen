@@ -1,0 +1,19 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow read/write to sync_groups collection (existing)
+    match /sync_groups/{document=**} {
+      allow read, write: if true;
+    }
+    
+    // Allow read/write to delivery_customers collection (new)
+    match /delivery_customers/{document=**} {
+      allow read, write: if true;
+    }
+    
+    // Allow read/write to delivery_settings collection (new)
+    match /delivery_settings/{document=**} {
+      allow read, write: if true;
+    }
+  }
+}

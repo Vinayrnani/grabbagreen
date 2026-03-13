@@ -2840,6 +2840,12 @@ async function checkPublishedStatus() {
 
 // Publish routes to Firestore
 async function publishRoutes() {
+    const token = localStorage.getItem('grabb_sync_token');
+    if (!token || !token.startsWith('GRABB')) {
+        alert('Error');
+        return;
+    }
+    
     const today = getToday();
     const identifiers = await getRouteIdentifiers();
     
@@ -2878,21 +2884,37 @@ async function publishRoutes() {
     let publishedCount = 0;
     
     for (const cust of customers) {
-        const record = attendance.find(a => a.custId === cust.id && a.status === 'delivered');
+        // Find attendance record for this customer today
+        const record = attendance.find(a => a.custId === cust.id);
         
-        // Skip if not delivered or skipped
-        if (!record) continue;
+        // Skip if status is 'skipped' - only publish non-skipped customers
+        if (record && record.status === 'skipped') continue;
         
         const driverMobile = identifiers[cust.route];
         if (!driverMobile) continue;
         
         // Build inclusions string
-        let inclusions = record.inclusion || 'S1';
-        if (record.addon) inclusions += '+' + record.addon;
+        let inclusions = 'S1';
+        if (record && record.inclusion) {
+            inclusions = record.inclusion;
+        } else if (cust.plan && cust.plan.toLowerCase().includes('couple')) {
+            inclusions = 'S2';
+        } else if (cust.plan && cust.plan.toLowerCase().includes('mealbox')) {
+            inclusions = 'M1';
+        }
+        
+        // Add included addon for premium/couple
+        if (record && record.addon) {
+            inclusions += '+' + record.addon;
+        } else if (cust.plan && cust.plan.toLowerCase().includes('premium')) {
+            inclusions += '+C'; // Default chicken for premium
+        } else if (cust.plan && cust.plan.toLowerCase().includes('couple') && record && record.coupleAddon1) {
+            inclusions += '+' + record.coupleAddon1;
+        }
         
         // Build extra addons string
         let extraAddons = '';
-        if (record.extraAddons && Array.isArray(record.extraAddons)) {
+        if (record && record.extraAddons && Array.isArray(record.extraAddons)) {
             extraAddons = record.extraAddons.join(',');
         }
         
@@ -2913,17 +2935,19 @@ async function publishRoutes() {
     }
     
     if (publishedCount === 0) {
-        alert('No delivered customers to publish. Mark customers as delivered first.');
+        alert('No customers to publish. Make sure customers have routes assigned and drivers are set.');
         return;
     }
     
     try {
+        console.log('Publishing', publishedCount, 'customers...');
         await batch.commit();
+        console.log('Published successfully');
         alert(`✅ Published ${publishedCount} customers to delivery routes!`);
         document.getElementById('routeShareModal').classList.add('hidden');
     } catch (e) {
         console.error('Publish error:', e);
-        alert('❌ Failed to publish. Check internet connection.');
+        alert('❌ Failed to publish: ' + e.message);
     }
 }
 
@@ -2932,6 +2956,12 @@ async function pullDeliveryUpdates() {
     const today = getToday();
     const token = localStorage.getItem('grabb_sync_token');
     if (!token) return; // Only pull if synced
+    
+    // Get local route identifiers
+    const identifiers = await getRouteIdentifiers();
+    const validMobiles = Object.values(identifiers);
+    
+    if (validMobiles.length === 0) return; // No drivers set
     
     try {
         const snapshot = await fs.collection('delivery_customers')
@@ -2944,18 +2974,24 @@ async function pullDeliveryUpdates() {
         
         for (const doc of snapshot.docs) {
             const data = doc.data();
+            
+            // Check 1: Is this driver in our local route identifiers?
+            if (!validMobiles.includes(data.driverMobile)) continue;
+            
+            // Check 2: Is it delivered?
             if (!data.isDelivered) continue;
             
-            // Check if we have a local delivered record
+            // Check 3: Does customer exist in local DB?
+            const customer = await db.customers.get(data.custId);
+            if (!customer) continue;
+            
+            // Check 4: Chef entries always win - only pull if no local record exists
             const existing = await db.attendance
                 .where({ custId: data.custId, date: today })
                 .first();
             
-            // If not delivered locally but delivered in cloud, update local
-            if (!existing || existing.status !== 'delivered') {
-                const customer = await db.customers.get(data.custId);
-                if (!customer) continue;
-                
+            // Only add if no existing record - chef's marking takes precedence
+            if (!existing) {
                 const hasPendingAddon = customer.pendingAddonDate === today;
                 const finalAddons = hasPendingAddon ? 1 : 0;
                 const inclusion = customer.plan && customer.plan.toLowerCase().includes('couple') ? 'S2' : 'S1';

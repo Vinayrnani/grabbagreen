@@ -336,5 +336,17 @@ Syntax OK.
 
 ---
 
-## Prompt: ppp
+# 2026-03-13
+
+## Prompt: okay one more thing, if the Sync Token is empty or does not start with GRABB then do not publish just say error dont say what error it is
+
+## Response: Deployed! Added:
+1. Token validation in publishRoutes - shows "Error" if token empty or doesn't start with GRABB
+2. Chef sync fix - only pulls if no local record exists (chef entries always win)
+
+---
+
+## Prompt: go ahead
+
+## Response: Done. Deploying now.
 

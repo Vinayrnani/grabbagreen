@@ -2,10 +2,12 @@
 
 let currentDriverMobile = '';
 let selectedDeliveryCustId = null;
+let selectedDeliveryData = null;
 let allDeliveries = [];
+let deliveryProcessing = false;
 
-// Initialize on load
 window.addEventListener('DOMContentLoaded', () => {
+    cleanupOldLocalRecords();
     checkLogin();
 });
 
@@ -28,69 +30,101 @@ function loginDelivery() {
     
     currentDriverMobile = mobile;
     localStorage.setItem('deliveryDriverMobile', mobile);
-    
     loadDeliveryRoute();
-}
-
-function logoutDelivery() {
-    if (confirm('Logout?')) {
-        localStorage.removeItem('deliveryDriverMobile');
-        location.reload();
-    }
 }
 
 async function loadDeliveryRoute() {
     showLoading();
-    
     const today = getToday();
     
     try {
-        // First try to load from local storage
+        // Get local deliveries first (offline support)
         const localDeliveries = await deliveryDB.deliveries
             .where('date').equals(today)
             .toArray();
         
-        if (localDeliveries.length > 0) {
-            renderDeliveryCards(localDeliveries);
+        let cloudDeliveries = [];
+        let cloudFetched = false;
+        
+        // Try to fetch from cloud
+        try {
+            const snapshot = await fs.collection('delivery_customers')
+                .where('date', '==', today)
+                .where('driverMobile', '==', currentDriverMobile)
+                .get();
+            
+            if (!snapshot.empty) {
+                cloudDeliveries = snapshot.docs.map(doc => {
+                    const data = doc.data();
+                    return {
+                        firestoreId: doc.id,
+                        custId: data.custId,
+                        date: data.date,
+                        route: data.route,
+                        driverMobile: data.driverMobile,
+                        name: data.name,
+                        nickname: data.nickname,
+                        inclusions: data.inclusions,
+                        extraAddons: data.extraAddons,
+                        isDelivered: data.isDelivered || false,
+                        updatedAt: data.updatedAt ? data.updatedAt.toDate() : new Date(0),
+                        source: 'cloud'
+                    };
+                });
+                cloudFetched = true;
+            }
+        } catch (e) {
+            console.log('Cloud fetch failed, using local:', e);
+        }
+        
+        // Merge based on timestamp precedence
+        const merged = [];
+        const allCustIds = new Set();
+        
+        if (cloudFetched && cloudDeliveries.length > 0) {
+            // Cloud first - merge with local using timestamps
+            cloudDeliveries.forEach(cloud => {
+                allCustIds.add(cloud.custId);
+                const local = localDeliveries.find(l => l.custId === cloud.custId);
+                
+                if (!local) {
+                    merged.push(cloud);
+                } else {
+                    // Compare timestamps - newer wins
+                    const localTime = local.updatedAt ? new Date(local.updatedAt).getTime() : 0;
+                    const cloudTime = cloud.updatedAt ? new Date(cloud.updatedAt).getTime() : 0;
+                    
+                    if (cloudTime >= localTime) {
+                        merged.push(cloud);
+                    } else {
+                        merged.push(local);
+                    }
+                }
+            });
+            
+            // Add local-only records
+            localDeliveries.forEach(local => {
+                if (!allCustIds.has(local.custId)) {
+                    merged.push(local);
+                }
+            });
+        } else {
+            // No cloud - use local
+            merged.push(...localDeliveries);
+        }
+        
+        if (merged.length === 0) {
+            document.getElementById('loginScreen').classList.add('hidden');
+            document.getElementById('mainApp').classList.remove('hidden');
+            document.getElementById('deliveryList').innerHTML = '<div class="text-center py-12 text-gray-500">No deliveries assigned. Check with your manager.</div>';
             hideLoading();
-            // Try to sync with cloud in background
-            syncWithCloud();
             return;
         }
         
-        // If no local data, try to fetch from cloud
-        const snapshot = await fs.collection('delivery_customers')
-            .where('date', '==', today)
-            .where('driverMobile', '==', currentDriverMobile)
-            .get();
-        
-        if (snapshot.empty) {
-            showEmptyState();
-            hideLoading();
-            return;
-        }
-        
-        const deliveries = snapshot.docs.map(doc => {
-            const data = doc.data();
-            return {
-                id: doc.id,
-                custId: data.custId,
-                date: data.date,
-                route: data.route,
-                driverMobile: data.driverMobile,
-                name: data.name,
-                nickname: data.nickname,
-                inclusions: data.inclusions,
-                extraAddons: data.extraAddons,
-                isDelivered: data.isDelivered || false,
-                updatedAt: data.updatedAt ? data.updatedAt.toDate() : new Date()
-            };
-        });
-        
-        // Save to local DB
-        for (const d of deliveries) {
+        // Save merged data to local DB
+        for (const d of merged) {
             await deliveryDB.deliveries.put({
-                firestoreId: d.id,
+                firestoreId: d.firestoreId,
                 custId: d.custId,
                 date: d.date,
                 route: d.route,
@@ -104,121 +138,140 @@ async function loadDeliveryRoute() {
             });
         }
         
-        renderDeliveryCards(deliveries);
+        renderDeliveryCards(merged);
         
     } catch (error) {
         console.error('Error loading deliveries:', error);
-        alert('Error loading route. Check internet connection.');
+        
+        // On error, try local
+        const localDeliveries = await deliveryDB.deliveries
+            .where('date').equals(today)
+            .toArray();
+        
+        if (localDeliveries.length > 0) {
+            renderDeliveryCards(localDeliveries);
+        } else {
+            alert('Error loading route. Check internet connection.');
+        }
     }
     
     hideLoading();
 }
 
 function renderDeliveryCards(deliveries) {
-    const container = document.getElementById('deliveryCards');
-    const emptyState = document.getElementById('emptyState');
-    
+    const container = document.getElementById('deliveryList');
     allDeliveries = deliveries;
     
-    // Sort: undelivered first, then delivered
-    deliveries.sort((a, b) => {
-        if (a.isDelivered === b.isDelivered) return 0;
-        return a.isDelivered ? 1 : -1;
-    });
-    
     if (deliveries.length === 0) {
-        container.classList.add('hidden');
-        emptyState.classList.remove('hidden');
+        container.innerHTML = '<div class="text-center py-12 text-gray-500">No deliveries assigned</div>';
+        document.getElementById('loginScreen').classList.add('hidden');
+        document.getElementById('mainApp').classList.remove('hidden');
         return;
     }
     
-    container.classList.remove('hidden');
-    emptyState.classList.add('hidden');
+    // Sort by customer ID
+    deliveries.sort((a, b) => a.custId - b.custId);
     
-    // Get route from first delivery
     const route = deliveries[0]?.route || '';
     document.getElementById('routeBadge').textContent = `Route ${route}`;
     
-    // Update count
     const delivered = deliveries.filter(d => d.isDelivered).length;
     document.getElementById('deliveryCount').textContent = `${delivered}/${deliveries.length}`;
     
-    container.innerHTML = deliveries.map(d => `
-        <div id="card-${d.custId}" 
-            class="delivery-card p-4 rounded-xl border-l-8 flex justify-between items-center transition-all shadow-lg ${d.isDelivered ? 'bg-green-50 border-l-green-500' : 'bg-white border-l-gray-800'}"
-            data-custid="${d.custId}"
-            data-firestoreid="${d.firestoreId || ''}">
+    container.innerHTML = deliveries.map(d => {
+        const name = d.nickname || d.name;
+        const extraAddonDisplay = d.extraAddons ? d.extraAddons.split(',').map(a => 
+            `<span class="text-xs px-2 py-0.5 rounded font-bold bg-red-100 text-red-700 border border-red-300">${a}</span>`
+        ).join(' ') : '';
+        
+        if (d.isDelivered) {
+            return `
+            <div id="card-${d.custId}" class="customer-card p-4 rounded-xl border-l-8 flex justify-between items-center shadow-lg bg-green-50 border-l-green-500 h-[100px]">
+                <div class="flex-1">
+                    <div class="flex items-center gap-2">
+                        <span class="bg-gray-800 text-white text-[10px] px-2 py-0.5 rounded font-bold">${d.route}</span>
+                        <h3 class="font-bold text-xl text-gray-900">${name}</h3>
+                        <span class="text-green-500 text-sm font-bold">✓</span>
+                    </div>
+                    <div class="text-sm mt-1">
+                        <span class="text-black font-bold">INC:</span>
+                        <span class="bg-blue-500 text-white text-xs px-2 py-0.5 rounded font-bold ml-1">${d.inclusions}</span>
+                        ${extraAddonDisplay ? `<span class="ml-2">${extraAddonDisplay}</span>` : ''}
+                    </div>
+                </div>
+            </div>`;
+        }
+        
+        return `
+        <div id="card-${d.custId}" class="customer-card p-4 rounded-xl border-l-8 flex justify-between items-center transition-all shadow-lg bg-white border-l-gray-800 h-[100px]">
             <div class="flex-1">
-                <div class="flex items-center gap-2 mb-2">
+                <div class="flex items-center gap-2">
                     <span class="bg-gray-800 text-white text-[10px] px-2 py-0.5 rounded font-bold">${d.route}</span>
-                    <h3 class="font-bold text-lg text-gray-900">${d.nickname || d.name}</h3>
-                    ${d.isDelivered ? '<span class="text-green-500 text-sm font-bold">✓ Delivered</span>' : ''}
+                    <h3 class="font-bold text-xl text-gray-900">${name}</h3>
                 </div>
-                <div class="text-sm">
-                    <span class="font-bold text-gray-600">INC:</span>
-                    <span class="bg-blue-500 text-white text-xs px-2 py-0.5 rounded font-bold ml-1">${d.inclusions}</span>
-                </div>
-                ${d.extraAddons ? `
                 <div class="text-sm mt-1">
-                    <span class="font-bold text-gray-600">Extra:</span>
-                    <span class="bg-purple-100 text-purple-700 text-xs px-2 py-0.5 rounded font-bold ml-1">${d.extraAddons}</span>
+                    <span class="text-black font-bold">INC:</span>
+                    <span class="bg-blue-500 text-white text-xs px-2 py-0.5 rounded font-bold ml-1">${d.inclusions}</span>
+                    ${extraAddonDisplay ? `<span class="ml-2">${extraAddonDisplay}</span>` : ''}
                 </div>
-                ` : ''}
             </div>
-            <div class="text-right">
-                ${d.isDelivered ? '' : '<span class="text-gray-300 text-xs">→</span>'}
-            </div>
-        </div>
-    `).join('');
+        </div>`;
+    }).join('');
     
-    // Add swipe handlers to undelivered cards
-    deliveries.filter(d => !d.isDelivered).forEach(d => {
+    // Add handlers - swipe only for undelivered, long press only for delivered
+    deliveries.forEach(d => {
         const card = document.getElementById(`card-${d.custId}`);
-        if (card) {
-            setupSwipe(card, d);
-            setupLongPress(card, d);
+        if (!card) return;
+        
+        if (d.isDelivered) {
+            // Long press only for delivered cards (to reset)
+            setupLongPress(card, d.custId);
+        } else {
+            // Swipe only for undelivered cards
+            setupSwipe(card, d.custId);
         }
     });
     
-    // Show the app
+    // Show main app
     document.getElementById('loginScreen').classList.add('hidden');
-    document.getElementById('appHeader').classList.remove('hidden');
-    document.getElementById('deliveryList').classList.remove('hidden');
+    document.getElementById('mainApp').classList.remove('hidden');
 }
 
-function setupSwipe(el, delivery) {
+// Exactly like attendance app
+function setupSwipe(el, custId) {
     let startX = 0;
     let activated = false;
-    
+
     el.addEventListener('touchstart', e => {
         startX = e.touches[0].clientX;
         activated = false;
         el.style.transition = 'none';
     }, { passive: true });
-    
+
     el.addEventListener('touchmove', e => {
         if (activated) return;
         let diff = e.touches[0].clientX - startX;
-        
-        if (diff > 10) {
+
+        if (Math.abs(diff) > 10) {
             el.style.transform = `translateX(${diff}px)`;
-            el.style.backgroundColor = "#dcfce7"; // Greenish
+            if (diff > 80) el.style.backgroundColor = "#dcfce7";
+            else el.style.backgroundColor = "";
         }
     }, { passive: true });
-    
+
     el.addEventListener('touchend', e => {
         let diff = e.changedTouches[0].clientX - startX;
         el.style.transition = 'transform 0.3s ease-out, background 0.3s';
         el.style.transform = `translateX(0)`;
         el.style.backgroundColor = "";
-        
-        if (!activated && diff > 100) {
+
+        if (!activated && diff > 120) {
             activated = true;
-            markDelivered(delivery);
+            markDelivered(custId);
         }
     });
     
-    // Mouse support for desktop testing
+    // Mouse support
     el.addEventListener('mousedown', e => {
         startX = e.clientX;
         activated = false;
@@ -228,10 +281,11 @@ function setupSwipe(el, delivery) {
     el.addEventListener('mousemove', e => {
         if (activated) return;
         let diff = e.clientX - startX;
-        
-        if (diff > 10) {
+
+        if (Math.abs(diff) > 10) {
             el.style.transform = `translateX(${diff}px)`;
-            el.style.backgroundColor = "#dcfce7";
+            if (diff > 80) el.style.backgroundColor = "#dcfce7";
+            else el.style.backgroundColor = "";
         }
     });
     
@@ -240,94 +294,49 @@ function setupSwipe(el, delivery) {
         el.style.transition = 'transform 0.3s ease-out, background 0.3s';
         el.style.transform = `translateX(0)`;
         el.style.backgroundColor = "";
-        
-        if (!activated && diff > 100) {
+
+        if (!activated && diff > 120) {
             activated = true;
-            markDelivered(delivery);
+            markDelivered(custId);
         }
     });
     
-    el.addEventListener('mouseleave', e => {
+    el.addEventListener('mouseleave', () => {
         el.style.transition = 'transform 0.3s ease-out, background 0.3s';
         el.style.transform = `translateX(0)`;
         el.style.backgroundColor = "";
     });
 }
 
-function setupLongPress(el, delivery) {
+// Exactly like attendance app
+function setupLongPress(element, custId) {
     let pressTimer = null;
     
-    el.addEventListener('touchstart', e => {
+    const start = (e) => {
+        if (e.type === 'click' && e.button !== 0) return;
+        clearTimeout(pressTimer);
         pressTimer = setTimeout(() => {
-            openActionMenu(delivery);
-        }, 800);
-    });
-    
-    el.addEventListener('touchend', () => {
-        clearTimeout(pressTimer);
-    });
-    
-    el.addEventListener('touchmove', () => {
-        clearTimeout(pressTimer);
-    });
-    
-    // Mouse support
-    el.addEventListener('contextmenu', e => {
-        e.preventDefault();
-        openActionMenu(delivery);
-    });
+            if (navigator.vibrate) navigator.vibrate(50);
+            openActionMenu(custId);
+        }, 600);
+    };
+
+    const cancel = () => clearTimeout(pressTimer);
+
+    element.addEventListener('touchstart', start, { passive: true });
+    element.addEventListener('touchend', cancel);
+    element.addEventListener('touchmove', cancel);
+    element.addEventListener('mousedown', start);
+    element.addEventListener('mouseup', cancel);
+    element.addEventListener('mouseleave', cancel);
 }
 
-async function markDelivered(delivery) {
-    try {
-        // Update local DB
-        await deliveryDB.deliveries
-            .where({ custId: delivery.custId, date: delivery.date })
-            .first()
-            .then(async record => {
-                if (record) {
-                    await deliveryDB.deliveries.update(record.id, {
-                        isDelivered: true,
-                        updatedAt: new Date()
-                    });
-                }
-            });
-        
-        // Update Firestore
-        if (delivery.firestoreId) {
-            await fs.collection('delivery_customers').doc(delivery.firestoreId).update({
-                isDelivered: true,
-                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            });
-        }
-        
-        // Update UI
-        const card = document.getElementById(`card-${delivery.custId}`);
-        if (card) {
-            card.classList.add('bg-green-50', 'border-l-green-500');
-            card.classList.remove('bg-white', 'border-l-gray-800');
-            
-            const content = card.querySelector('.flex-1');
-            content.innerHTML += '<span class="text-green-500 text-sm font-bold ml-2">✓ Delivered</span>';
-            
-            // Remove swipe handler by replacing element
-            const newCard = card.cloneNode(true);
-            card.parentNode.replaceChild(newCard, card);
-        }
-        
-        // Update count
-        const delivered = allDeliveries.filter(d => d.isDelivered).length + 1;
-        const total = allDeliveries.length;
-        document.getElementById('deliveryCount').textContent = `${delivered}/${total}`;
-        
-    } catch (error) {
-        console.error('Error marking delivered:', error);
-        alert('Error saving. Will retry on next sync.');
-    }
-}
-
-function openActionMenu(delivery) {
-    selectedDeliveryCustId = delivery.custId;
+function openActionMenu(custId) {
+    const delivery = allDeliveries.find(d => d.custId === custId);
+    if (!delivery) return;
+    
+    selectedDeliveryCustId = custId;
+    selectedDeliveryData = delivery;
     document.getElementById('actionMenu').classList.remove('hidden');
     document.getElementById('actionMenu').classList.add('flex');
 }
@@ -336,6 +345,49 @@ function closeActionMenu() {
     document.getElementById('actionMenu').classList.add('hidden');
     document.getElementById('actionMenu').classList.remove('flex');
     selectedDeliveryCustId = null;
+    selectedDeliveryData = null;
+}
+
+async function markDelivered(custId) {
+    if (deliveryProcessing) return;
+    deliveryProcessing = true;
+    
+    const delivery = allDeliveries.find(d => d.custId === custId);
+    if (!delivery) {
+        deliveryProcessing = false;
+        return;
+    }
+    
+    try {
+        // Update local DB
+        const record = await deliveryDB.deliveries
+            .where({ custId: custId, date: delivery.date })
+            .first();
+        
+        if (record) {
+            await deliveryDB.deliveries.update(record.id, {
+                isDelivered: true,
+                updatedAt: new Date()
+            });
+        }
+        
+        // Update Firestore
+        const firestoreId = delivery.firestoreId || delivery.id;
+        if (firestoreId) {
+            await fs.collection('delivery_customers').doc(firestoreId).update({
+                isDelivered: true,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        }
+        
+        loadDeliveryRoute();
+        
+    } catch (error) {
+        console.error('Error marking delivered:', error);
+        alert('Error saving. Will retry on next sync.');
+    }
+    
+    deliveryProcessing = false;
 }
 
 async function resetDelivery() {
@@ -349,7 +401,6 @@ async function resetDelivery() {
     const today = getToday();
     
     try {
-        // Update local DB
         const record = await deliveryDB.deliveries
             .where({ custId: selectedDeliveryCustId, date: today })
             .first();
@@ -360,7 +411,6 @@ async function resetDelivery() {
                 updatedAt: new Date()
             });
             
-            // Update Firestore
             if (record.firestoreId) {
                 await fs.collection('delivery_customers').doc(record.firestoreId).update({
                     isDelivered: false,
@@ -369,7 +419,6 @@ async function resetDelivery() {
             }
         }
         
-        // Reload the route
         loadDeliveryRoute();
         
     } catch (error) {
@@ -380,57 +429,66 @@ async function resetDelivery() {
     closeActionMenu();
 }
 
-async function refreshDelivery() {
-    localStorage.removeItem('deliveryDriverMobile');
-    location.reload();
+function refreshDelivery() {
+    loadDeliveryRoute();
 }
 
 async function syncWithCloud() {
     try {
         const today = getToday();
         
-        // Get pending deliveries from local
-        const pending = await deliveryDB.deliveries
+        // Get cloud data
+        const snapshot = await fs.collection('delivery_customers')
+            .where('date', '==', today)
+            .where('driverMobile', '==', currentDriverMobile)
+            .get();
+        
+        const cloudData = {};
+        if (!snapshot.empty) {
+            snapshot.docs.forEach(doc => {
+                const data = doc.data();
+                cloudData[data.custId] = {
+                    firestoreId: doc.id,
+                    isDelivered: data.isDelivered || false,
+                    updatedAt: data.updatedAt ? data.updatedAt.toDate() : new Date(0)
+                };
+            });
+        }
+        
+        // Get local data and compare timestamps
+        const localDeliveries = await deliveryDB.deliveries
             .where('date').equals(today)
             .toArray();
         
-        for (const d of pending) {
-            if (d.firestoreId) {
-                // Push to cloud
+        for (const d of localDeliveries) {
+            const cloud = cloudData[d.custId];
+            const localTime = d.updatedAt ? new Date(d.updatedAt).getTime() : 0;
+            
+            if (cloud) {
+                const cloudTime = cloud.updatedAt ? new Date(cloud.updatedAt).getTime() : 0;
+                
+                if (localTime > cloudTime) {
+                    // Local is newer - push to cloud
+                    await fs.collection('delivery_customers').doc(d.firestoreId).update({
+                        isDelivered: d.isDelivered,
+                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                } else if (cloudTime > localTime) {
+                    // Cloud is newer - update local
+                    await deliveryDB.deliveries.update(d.id, {
+                        isDelivered: cloud.isDelivered,
+                        updatedAt: cloud.updatedAt
+                    });
+                }
+                // If equal, do nothing
+            } else if (d.firestoreId) {
+                // No cloud record, push local
                 await fs.collection('delivery_customers').doc(d.firestoreId).update({
                     isDelivered: d.isDelivered,
                     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
             }
         }
-        
-        // Pull any updates from cloud
-        const snapshot = await fs.collection('delivery_customers')
-            .where('date', '==', today)
-            .where('driverMobile', '==', currentDriverMobile)
-            .get();
-        
-        for (const doc of snapshot.docs) {
-            const data = doc.data();
-            const local = await deliveryDB.deliveries
-                .where({ custId: data.custId, date: today })
-                .first();
-            
-            if (local) {
-                // Update local with cloud status
-                await deliveryDB.deliveries.update(local.id, {
-                    isDelivered: data.isDelivered,
-                    updatedAt: data.updatedAt ? data.updatedAt.toDate() : new Date()
-                });
-            }
-        }
-        
-        // Reload display
-        const updated = await deliveryDB.deliveries
-            .where('date').equals(today)
-            .toArray();
-        
-        renderDeliveryCards(updated);
         
     } catch (error) {
         console.log('Sync error:', error);
@@ -445,14 +503,28 @@ function hideLoading() {
     document.getElementById('loadingIndicator').classList.add('hidden');
 }
 
-function showEmptyState() {
-    document.getElementById('deliveryCards').classList.add('hidden');
-    document.getElementById('emptyState').classList.remove('hidden');
-    document.getElementById('loginScreen').classList.add('hidden');
-    document.getElementById('appHeader').classList.remove('hidden');
-    document.getElementById('deliveryList').classList.remove('hidden');
-}
-
 function getToday() {
     return new Date().toISOString().split('T')[0];
+}
+
+async function cleanupOldLocalRecords() {
+    try {
+        const sixtyDaysAgo = new Date();
+        sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+        const cutoffDate = sixtyDaysAgo.toISOString().split('T')[0];
+        
+        const oldRecords = await deliveryDB.deliveries
+            .where('date')
+            .below(cutoffDate)
+            .toArray();
+        
+        if (oldRecords.length === 0) return;
+        
+        for (const record of oldRecords) {
+            await deliveryDB.deliveries.delete(record.id);
+        }
+        console.log(`Cleaned up ${oldRecords.length} old local delivery records`);
+    } catch (e) {
+        console.log('Error cleaning up old local records:', e);
+    }
 }

@@ -344,36 +344,51 @@ function generateCardHTML(cust, todayEntry, attendanceMap, coupleAddonCounts, vi
     const isCouple = getPlanAbbreviation(cust.plan) === 'CP';
     const isPremium = getPlanAbbreviation(cust.plan) === 'P';
     
-    // Get inclusion: pending > todayEntry > default
-    let inclusion = pendingInclusions.get(cust.id);
-    if (!inclusion && todayEntry) {
+    // Only apply pending data if card is NOT locked (not marked yet)
+    const isLocked = statusConfig.isLocked;
+    
+    // Get inclusion: pending only if unlocked > todayEntry > default
+    let inclusion;
+    if (!isLocked && pendingInclusions.get(cust.id)) {
+        inclusion = pendingInclusions.get(cust.id);
+    } else if (todayEntry) {
         inclusion = todayEntry.inclusion || getDefaultInclusion(cust.plan);
+    } else {
+        inclusion = getDefaultInclusion(cust.plan);
     }
-    inclusion = inclusion || getDefaultInclusion(cust.plan);
     
-    // Get addon for premium customers
-    let addon = pendingAddons.get(cust.id);
-    if (!addon && todayEntry) {
+    // Get addon for premium customers: pending only if unlocked
+    let addon;
+    if (!isLocked && pendingAddons.get(cust.id)) {
+        addon = pendingAddons.get(cust.id);
+    } else if (todayEntry) {
         addon = todayEntry.addon || 'C';
+    } else {
+        addon = 'C';
     }
-    addon = addon || 'C';
     
-    // Get free addons for couple customers
-    let coupleAddon1 = pendingCoupleAddons.get(cust.id + '_1');
+    // Get free addons for couple customers: pending only if unlocked
+    let coupleAddon1, coupleAddon2;
+    if (!isLocked) {
+        coupleAddon1 = pendingCoupleAddons.get(cust.id + '_1');
+        coupleAddon2 = pendingCoupleAddons.get(cust.id + '_2');
+    }
     if (!coupleAddon1 && todayEntry) {
         coupleAddon1 = todayEntry.coupleAddon1;
     }
-    let coupleAddon2 = pendingCoupleAddons.get(cust.id + '_2');
     if (!coupleAddon2 && todayEntry) {
         coupleAddon2 = todayEntry.coupleAddon2;
     }
 
-    // Get extra addons: pending > todayEntry > empty
-    let extraAddons = pendingExtraAddons.get(cust.id);
-    if (!extraAddons && todayEntry) {
+    // Get extra addons: pending only if unlocked
+    let extraAddons;
+    if (!isLocked && pendingExtraAddons.get(cust.id)) {
+        extraAddons = pendingExtraAddons.get(cust.id);
+    } else if (todayEntry) {
         extraAddons = todayEntry.extraAddons || [];
+    } else {
+        extraAddons = [];
     }
-    extraAddons = extraAddons || [];
 
     const isOnVacation = todayEntry && todayEntry.isVacation;
 

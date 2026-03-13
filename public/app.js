@@ -3235,8 +3235,8 @@ function showMissingAttendanceModal(missingByDate) {
             <div class="mb-4">
                 <div class="flex justify-between items-center">
                     <span class="font-bold text-gray-800">${label}</span>
-                    <button onclick="goToDate('${dateStr}')" class="text-blue-600 font-bold text-xl px-3 py-1">
-                        →
+                    <button onclick="goToDate('${dateStr}')" class="text-blue-600 font-bold text-2xl px-3 py-1 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
+                        ⏩
                     </button>
                 </div>
                 <div class="ml-4 mt-1">

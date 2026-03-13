@@ -3060,8 +3060,7 @@ async function pullDeliveryUpdates() {
     
     const identifiers = await getRouteIdentifiers();
     const validMobiles = Object.values(identifiers);
-    
-    if (validMobiles.length === 0) return;
+    const hasRouteMobiles = validMobiles.length > 0;
     
     const missingByDate = {};
     let totalPulled = 0;
@@ -3087,14 +3086,15 @@ async function pullDeliveryUpdates() {
             const localAttendance = await db.attendance.where('date').equals(dateStr).toArray();
             const localCustIds = localAttendance.map(a => a.custId);
             
-            // Get commondb records for this date
+            // Get commondb records for this date (only if route mobiles are set)
             let cloudRecords = [];
-            try {
-                const snapshot = await fs.collection('delivery_customers')
-                    .where('date', '==', dateStr)
-                    .get();
-                
-                cloudRecords = snapshot.docs.map(doc => ({
+            if (hasRouteMobiles) {
+                try {
+                    const snapshot = await fs.collection('delivery_customers')
+                        .where('date', '==', dateStr)
+                        .get();
+                    
+                    cloudRecords = snapshot.docs.map(doc => ({
                     id: doc.id,
                     ...doc.data()
                 })).filter(r => 

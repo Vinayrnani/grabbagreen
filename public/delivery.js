@@ -6,6 +6,25 @@ let selectedDeliveryData = null;
 let allDeliveries = [];
 let deliveryProcessing = false;
 
+// Helper for plan badge
+function getPlanBadge(plan) {
+    const abbr = {
+        'Regular': 'R',
+        'Premium': 'P',
+        'Couple': 'CP',
+        'MealBox': 'M'
+    }[plan] || 'R';
+    
+    const colors = {
+        'R': 'bg-gray-500',
+        'P': 'bg-amber-500',
+        'CP': 'bg-green-500',
+        'M': 'bg-blue-500'
+    }[abbr] || 'bg-gray-500';
+    
+    return { abbr, colors };
+}
+
 window.addEventListener('DOMContentLoaded', () => {
     cleanupOldLocalRecords();
     checkLogin();
@@ -64,6 +83,7 @@ async function loadDeliveryRoute() {
                         driverMobile: data.driverMobile,
                         name: data.name,
                         nickname: data.nickname,
+                        plan: data.plan || 'Regular',
                         inclusions: data.inclusions,
                         extraAddons: data.extraAddons,
                         isDelivered: data.isDelivered || false,
@@ -131,6 +151,7 @@ async function loadDeliveryRoute() {
                 driverMobile: d.driverMobile,
                 name: d.name,
                 nickname: d.nickname,
+                plan: d.plan || 'Regular',
                 inclusions: d.inclusions,
                 extraAddons: d.extraAddons,
                 isDelivered: d.isDelivered,
@@ -180,39 +201,56 @@ function renderDeliveryCards(deliveries) {
     
     container.innerHTML = deliveries.map(d => {
         const name = d.nickname || d.name;
-        const extraAddonDisplay = d.extraAddons ? d.extraAddons.split(',').map(a => 
-            `<span class="text-xs px-2 py-0.5 rounded font-bold bg-red-100 text-red-700 border border-red-300">${a}</span>`
-        ).join(' ') : '';
+        
+        // Get plan badge
+        const planInfo = getPlanBadge(d.plan);
+        
+        // Parse inclusions - if it has + the part after is addon
+        const inclusionParts = d.inclusions ? d.inclusions.split('+') : ['S1'];
+        const inclusion = inclusionParts[0];
+        const addon = inclusionParts[1] || '';
+        
+        // Extra addons display
+        const extraAddonDisplay = d.extraAddons ? d.extraAddons.split(',').map(a => {
+            const isNonVeg = ['C', 'F', 'SE', 'BE'].includes(a);
+            return `<span class="text-xs px-2 py-0.5 rounded font-bold ${isNonVeg ? 'bg-red-100 text-red-700 border border-red-300' : 'bg-green-100 text-green-700 border border-green-300'}">${a}</span>`;
+        }).join(' ') : '';
         
         if (d.isDelivered) {
+            // Delivered card - prominent ✓✓✓
             return `
             <div id="card-${d.custId}" class="customer-card p-4 rounded-xl border-l-8 flex justify-between items-center shadow-lg bg-green-50 border-l-green-500 h-[100px]">
                 <div class="flex-1">
                     <div class="flex items-center gap-2">
                         <span class="bg-gray-800 text-white text-[10px] px-2 py-0.5 rounded font-bold">${d.route}</span>
+                        <span class="${planInfo.colors} text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center">${planInfo.abbr}</span>
                         <h3 class="font-bold text-xl text-gray-900">${name}</h3>
-                        <span class="text-green-500 text-sm font-bold">✓</span>
                     </div>
                     <div class="text-sm mt-1">
                         <span class="text-black font-bold">INC:</span>
-                        <span class="bg-blue-500 text-white text-xs px-2 py-0.5 rounded font-bold ml-1">${d.inclusions}</span>
-                        ${extraAddonDisplay ? `<span class="ml-2">${extraAddonDisplay}</span>` : ''}
+                        <span class="bg-blue-500 text-white text-xs px-2 py-0.5 rounded font-bold ml-1">${inclusion}</span>
+                        ${addon ? `<span class="text-black font-bold ml-2">Addon:</span><span class="text-xs px-2 py-0.5 rounded font-bold bg-red-100 text-red-700 border border-red-300 ml-1">${addon}</span>` : ''}
+                        ${extraAddonDisplay ? `<div class="mt-1"><span class="text-black font-bold">Extra:</span><span class="ml-1">${extraAddonDisplay}</span></div>` : ''}
                     </div>
                 </div>
+                <div class="text-green-600 text-3xl font-bold">✓</div>
             </div>`;
         }
         
+        // Undelivered card
         return `
         <div id="card-${d.custId}" class="customer-card p-4 rounded-xl border-l-8 flex justify-between items-center transition-all shadow-lg bg-white border-l-gray-800 h-[100px]">
             <div class="flex-1">
                 <div class="flex items-center gap-2">
                     <span class="bg-gray-800 text-white text-[10px] px-2 py-0.5 rounded font-bold">${d.route}</span>
+                    <span class="${planInfo.colors} text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center">${planInfo.abbr}</span>
                     <h3 class="font-bold text-xl text-gray-900">${name}</h3>
                 </div>
                 <div class="text-sm mt-1">
                     <span class="text-black font-bold">INC:</span>
-                    <span class="bg-blue-500 text-white text-xs px-2 py-0.5 rounded font-bold ml-1">${d.inclusions}</span>
-                    ${extraAddonDisplay ? `<span class="ml-2">${extraAddonDisplay}</span>` : ''}
+                    <span class="bg-blue-500 text-white text-xs px-2 py-0.5 rounded font-bold ml-1">${inclusion}</span>
+                    ${addon ? `<span class="text-black font-bold ml-2">Addon:</span><span class="text-xs px-2 py-0.5 rounded font-bold bg-red-100 text-red-700 border border-red-300 ml-1">${addon}</span>` : ''}
+                    ${extraAddonDisplay ? `<div class="mt-1"><span class="text-black font-bold">Extra:</span><span class="ml-1">${extraAddonDisplay}</span></div>` : ''}
                 </div>
             </div>
         </div>`;

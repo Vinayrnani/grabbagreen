@@ -2826,12 +2826,23 @@ async function openDriverNumbersModal() {
 // Check if routes are already published for today
 async function checkPublishedStatus() {
     const today = getToday();
+    const identifiers = await getRouteIdentifiers();
+    const validMobiles = Object.values(identifiers);
+    
+    if (validMobiles.length === 0) return false;
+    
     try {
         const snapshot = await fs.collection('delivery_customers')
             .where('date', '==', today)
-            .limit(1)
             .get();
-        return !snapshot.empty;
+        
+        // Check only if OUR driver mobiles have published records
+        const hasOurs = snapshot.docs.some(doc => {
+            const data = doc.data();
+            return validMobiles.includes(data.driverMobile);
+        });
+        
+        return hasOurs;
     } catch (e) {
         console.log('Error checking publish status:', e);
         return false;
@@ -2848,6 +2859,7 @@ async function publishRoutes() {
     
     const today = getToday();
     const identifiers = await getRouteIdentifiers();
+    const validMobiles = Object.values(identifiers);
     
     if (Object.keys(identifiers).length === 0) {
         alert('Please set driver mobile numbers first using "Set Drivers" button.');
@@ -2861,14 +2873,18 @@ async function publishRoutes() {
         if (!confirm('Already published records for today will be deleted. Republish?')) {
             return;
         }
-        // Delete existing records for today
+        // Delete only OUR records for today
         try {
             const existing = await fs.collection('delivery_customers')
                 .where('date', '==', today)
                 .get();
             const batch = fs.batch();
             existing.docs.forEach(doc => {
-                batch.delete(doc.ref);
+                const data = doc.data();
+                // Only delete if it's OUR driver
+                if (validMobiles.includes(data.driverMobile)) {
+                    batch.delete(doc.ref);
+                }
             });
             await batch.commit();
         } catch (e) {
@@ -2893,29 +2909,36 @@ async function publishRoutes() {
         const driverMobile = identifiers[cust.route];
         if (!driverMobile) continue;
         
-        // Build inclusions string
-        let inclusions = 'S1';
-        if (record && record.inclusion) {
-            inclusions = record.inclusion;
-        } else if (cust.plan && cust.plan.toLowerCase().includes('couple')) {
-            inclusions = 'S2';
-        } else if (cust.plan && cust.plan.toLowerCase().includes('mealbox')) {
-            inclusions = 'M1';
-        }
+        // Build inclusions string - check pending first (chef's swaps), then attendance, then default
+        const pendingIncl = pendingInclusions.get(cust.id);
+        let inclusions = pendingIncl || (record && record.inclusion) || getDefaultInclusion(cust.plan);
         
-        // Add included addon for premium/couple
-        if (record && record.addon) {
+        // Add included addon - check pending first, then attendance, then default
+        const pendingAddon = pendingAddons.get(cust.id);
+        const pendingCouple1 = pendingCoupleAddons.get(cust.id + '_1');
+        const pendingCouple2 = pendingCoupleAddons.get(cust.id + '_2');
+        
+        if (pendingAddon) {
+            inclusions += '+' + pendingAddon;
+        } else if (record && record.addon) {
             inclusions += '+' + record.addon;
         } else if (cust.plan && cust.plan.toLowerCase().includes('premium')) {
-            inclusions += '+C'; // Default chicken for premium
-        } else if (cust.plan && cust.plan.toLowerCase().includes('couple') && record && record.coupleAddon1) {
-            inclusions += '+' + record.coupleAddon1;
+            inclusions += '+C';
+        } else if (cust.plan && cust.plan.toLowerCase().includes('couple')) {
+            if (pendingCouple1) {
+                inclusions += '+' + pendingCouple1;
+            } else if (record && record.coupleAddon1) {
+                inclusions += '+' + record.coupleAddon1;
+            }
         }
         
-        // Build extra addons string
-        let extraAddons = '';
-        if (record && record.extraAddons && Array.isArray(record.extraAddons)) {
-            extraAddons = record.extraAddons.join(',');
+        // Build extra addons string - check pending first, then attendance
+        let extraAddons = [];
+        const pendingExtra = pendingExtraAddons.get(cust.id);
+        if (pendingExtra && pendingExtra.length > 0) {
+            extraAddons = pendingExtra;
+        } else if (record && record.extraAddons && Array.isArray(record.extraAddons)) {
+            extraAddons = record.extraAddons;
         }
         
         const docRef = fs.collection('delivery_customers').doc();
@@ -2926,8 +2949,11 @@ async function publishRoutes() {
             driverMobile: driverMobile,
             name: cust.name,
             nickname: cust.nickname || cust.name,
+            plan: cust.plan || 'Regular',
             inclusions: inclusions,
-            extraAddons: extraAddons,
+            coupleAddon1: pendingCouple1 || (record && record.coupleAddon1) || null,
+            coupleAddon2: pendingCouple2 || (record && record.coupleAddon2) || null,
+            extraAddons: extraAddons.join(','),
             isDelivered: false,
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         });
@@ -2975,6 +3001,13 @@ async function pullDeliveryUpdates() {
             checkDate.setDate(checkDate.getDate() - i);
             const dateStr = checkDate.toISOString().split('T')[0];
             
+            // Skip Sundays and holidays
+            const isSunday = checkDate.getDay() === 0;
+            const holidayData = await db.settings.get('holidayList');
+            const dynamicHolidays = holidayData ? holidayData.value : [];
+            const isHoliday = dynamicHolidays.includes(dateStr);
+            if (isSunday || isHoliday) continue;
+            
             // Get active customers
             const activeCustomers = await db.customers.where('status').equals('active').toArray();
             
@@ -3013,21 +3046,40 @@ async function pullDeliveryUpdates() {
                 if (!hasLocal && hasCloud) {
                     const cloudRec = cloudRecords.find(r => r.custId === customer.id);
                     
+                    const inclParts = (cloudRec.inclusions || getDefaultInclusion(customer.plan)).split('+');
+                    const inclusion = inclParts[0];
+                    const addon = inclParts[1] || null;
+                    
+                    const extraAddons = cloudRec.extraAddons ? cloudRec.extraAddons.split(',').filter(a => a) : [];
+                    
+                    let addons = 0;
+                    if (addon && !customer.plan?.toLowerCase().includes('premium') && 
+                        !customer.plan?.toLowerCase().includes('couple')) {
+                        addons = 1;
+                    }
+                    
+                    const isCouple = customer.plan && customer.plan.toLowerCase().includes('couple');
+                    
                     await db.attendance.add({
                         custId: customer.id,
                         date: dateStr,
                         status: 'delivered',
-                        addons: 0,
+                        addons: addons,
                         isWalkIn: false,
                         quantity: 1,
-                        inclusion: customer.plan && customer.plan.toLowerCase().includes('couple') ? 'S2' : 'S1',
-                        addon: null,
-                        coupleAddon1: null,
-                        coupleAddon2: null,
-                        extraAddons: []
+                        inclusion: inclusion,
+                        addon: addon,
+                        coupleAddon1: isCouple ? addon : null,
+                        coupleAddon2: isCouple ? (cloudRec.coupleAddon2 || null) : null,
+                        extraAddons: extraAddons
                     });
                     
-                    await db.customers.update(customer.id, { pendingAddonDate: null });
+                    pendingInclusions.delete(customer.id);
+                    pendingAddons.delete(customer.id);
+                    pendingExtraAddons.delete(customer.id);
+                    localStorage.removeItem('incl_' + customer.id);
+                    localStorage.removeItem('addon_' + customer.id);
+                    
                     pulledToday++;
                     totalPulled++;
                 }
@@ -3052,9 +3104,18 @@ async function pullDeliveryUpdates() {
         // Clean up old records
         await cleanupOldDeliveryRecords();
         
-        // Show modal only when viewing today and there are missing
-        if (isToday && Object.keys(missingByDate).length > 0) {
-            showMissingAttendanceModal(missingByDate);
+        // Filter out today from missing - only show past dates
+        const today = getToday();
+        const pastMissing = {};
+        Object.keys(missingByDate).forEach(dateStr => {
+            if (dateStr !== today) {
+                pastMissing[dateStr] = missingByDate[dateStr];
+            }
+        });
+        
+        // Show modal only when viewing today and there are missing past dates
+        if (isToday && Object.keys(pastMissing).length > 0) {
+            showMissingAttendanceModal(pastMissing);
         }
         
     } catch (e) {
@@ -3079,11 +3140,14 @@ function showMissingAttendanceModal(missingByDate) {
         const dayDiff = Math.floor((new Date() - dateObj) / (1000 * 60 * 60 * 24));
         const label = dateLabels[dayDiff] || dateStr;
         
-        html += `
+                html += `
             <div class="mb-4">
-                <button onclick="goToDate('${dateStr}')" class="flex items-center gap-2 text-blue-600 font-bold">
-                    ← ${label}
-                </button>
+                <div class="flex justify-between items-center">
+                    <span class="font-bold text-gray-800">${label}</span>
+                    <button onclick="goToDate('${dateStr}')" class="text-blue-600 font-bold text-xl px-3 py-1">
+                        →
+                    </button>
+                </div>
                 <div class="ml-4 mt-1">
                     ${customers.map(name => `<div class="text-gray-600">- ${name}</div>`).join('')}
                 </div>

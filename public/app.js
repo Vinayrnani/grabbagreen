@@ -2997,10 +2997,17 @@ async function publishRoutes() {
         } else if (cust.plan && cust.plan.toLowerCase().includes('premium')) {
             inclusions += '+C';
         } else if (cust.plan && cust.plan.toLowerCase().includes('couple')) {
+            // Add first couple addon
             if (pendingCouple1) {
                 inclusions += '+' + pendingCouple1;
             } else if (record && record.coupleAddon1) {
                 inclusions += '+' + record.coupleAddon1;
+            }
+            // Add second couple addon if exists
+            if (pendingCouple2) {
+                inclusions += '+' + pendingCouple2;
+            } else if (record && record.coupleAddon2) {
+                inclusions += '+' + record.coupleAddon2;
             }
         }
         

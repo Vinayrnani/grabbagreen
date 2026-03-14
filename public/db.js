@@ -3,8 +3,8 @@
 
 const db = new Dexie("SaladDB");
 
-db.version(17).stores({
-    customers: '++id, name, nickname, route, plan, status, vacationUntil, startDate, pendingAddonDate, mobile, discount, paymentType, advanceBalance, createdAt, updatedAt',
+db.version(18).stores({
+    customers: '++id, name, nickname, route, plan, status, vacationUntil, startDate, inactive_st_dt, inactive_ed_dt, pendingAddonDate, mobile, discount, paymentType, advanceBalance, createdAt, updatedAt',
     advances: '++id, custId, amount, date, invoiceNumber, notes, createdAt',
     attendance: '++id, [custId+date], date, status, addons, isWalkIn, quantity, isVacation, inclusion, addon, coupleAddon1, coupleAddon2, extraAddons, createdAt, updatedAt',
     logs: '++id, timestamp, action',
@@ -37,6 +37,12 @@ db.version(17).stores({
         if (record.startDate === undefined) {
             record.startDate = null;
         }
+    });
+}).upgrade(tx => {
+    // v18: Add inactive_st_dt and inactive_ed_dt fields
+    return tx.table('customers').toCollection().modify(record => {
+        if (record.inactive_st_dt === undefined) record.inactive_st_dt = null;
+        if (record.inactive_ed_dt === undefined) record.inactive_ed_dt = null;
     });
 });
 

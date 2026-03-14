@@ -527,7 +527,8 @@ async function updateSingleCard(custId) {
     
     // Check if customer should be in active or inactive section
     const hasRecord = attendanceMap.has(custId);
-    const isActive = cust.status !== 'inactive' || hasRecord;
+    const inInactivePeriod = isInInactivePeriod(cust, viewDate);
+    const isActive = (cust.status !== 'inactive' || hasRecord) && !inInactivePeriod;
     
     // Find existing card
     const existingCard = document.getElementById(`card-${custId}`);
@@ -559,7 +560,8 @@ async function updateSingleCard(custId) {
         const activeCustomers = allCustomers.filter(c => {
             const hasRecord = attendanceMap.has(c.id);
             const isCurrentlyActive = c.status !== 'inactive';
-            return isCurrentlyActive || hasRecord;
+            const inInactivePeriod = isInInactivePeriod(c, viewDate);
+            return (isCurrentlyActive || hasRecord) && !inInactivePeriod;
         });
         updateFilterPills(activeCustomers, attendanceMap);
     } else {
@@ -642,7 +644,8 @@ async function renderList() {
         const isCurrentlyActive = c.status !== 'inactive';
         const startDate = c.startDate || getToday();
         const isStarted = startDate <= viewDate; // Only show if customer has started
-        return (isCurrentlyActive || hasRecord) && isStarted;
+        const inInactivePeriod = isInInactivePeriod(c, viewDate); // Check if in inactive period
+        return (isCurrentlyActive || hasRecord) && isStarted && !inInactivePeriod;
     });
 
     // Update filter pills with counts (before applying package filter)
@@ -661,9 +664,10 @@ async function renderList() {
     const inactiveCustomers = allCustomers.filter(c => {
         const hasRecord = attendanceMap.has(c.id);
         const isCurrentlyInactive = c.status === 'inactive';
+        const inInactivePeriod = isInInactivePeriod(c, viewDate); // Check if in inactive period for this date
         const startDate = c.startDate || getToday();
         const isStarted = startDate <= viewDate;
-        return isCurrentlyInactive && !hasRecord && isStarted;
+        return (isCurrentlyInactive || inInactivePeriod) && !hasRecord && isStarted;
     });
     
     // 2. Pre-calculate couple addon counts for the current month
@@ -997,8 +1001,11 @@ async function init() {
     // Clear old localStorage route identifiers if exists
     localStorage.removeItem('routeIdentifiers');
     
-    // Initialize startDate for customers if missing
-    await initializeCustomerStartDates();
+    // Initialize startDate for customers if missing (non-blocking)
+    initializeCustomerStartDates();
+    
+    // Initialize inactive dates for existing inactive customers (run once, non-blocking)
+    initializeInactiveDates();
     
     // Check if daily addon enforcement is enabled
     const enforceSetting = localStorage.getItem('enforceDailyAddons');
@@ -1611,6 +1618,19 @@ function getToday() {
     return selectedDate;
 }
 
+function getYesterday() {
+    const today = new Date(localISOTime);
+    today.setDate(today.getDate() - 1);
+    return today.toISOString().split('T')[0];
+}
+
+// Check if customer is in inactive period for a given date
+function isInInactivePeriod(cust, checkDate) {
+    if (!cust.inactive_st_dt) return false;
+    const endDt = cust.inactive_ed_dt || '9999-12-31'; // if no end date, still inactive
+    return checkDate >= cust.inactive_st_dt && checkDate <= endDt;
+}
+
 
 const trueToday = localISOTime;
 
@@ -1725,6 +1745,7 @@ async function importData() {
 
 let currentEditingId = null;
 let currentEditingCust = null;
+let previousStatus = null; // Track previous status for inactive date logic
 
 // Add this to your card generation in renderList
 // 1. GLOBAL BLOCKER: Prevents the menu from ever appearing on cards
@@ -1829,6 +1850,7 @@ async function openEditModal(custId) {
     const cust = await db.customers.get(custId);
     currentEditingId = custId;
     currentEditingCust = cust;
+    previousStatus = cust.status; // Track previous status for inactive date logic
 
     // Load both names
     document.getElementById('editFullName').value = cust.name || '';
@@ -1937,13 +1959,42 @@ async function saveCustomerEdit() {
     // Preserve existing advance balance
     const advanceBalance = cust.advanceBalance || 0;
 
+    // Get new status from toggle
+    const newStatus = document.getElementById('editStatusToggle').checked ? 'active' : 'inactive';
+    const prevStatus = previousStatus || 'active';
+
+    // Handle inactive date logic
+    let inactive_st_dt = cust.inactive_st_dt;
+    let inactive_ed_dt = cust.inactive_ed_dt;
+    const today = getToday();
+    const yesterday = getYesterday();
+
+    // On → Off (active to inactive): set inactive_st_dt = today, clear inactive_ed_dt
+    if (prevStatus === 'active' && newStatus === 'inactive') {
+        inactive_st_dt = today;
+        inactive_ed_dt = null;
+    }
+    // Off → On (inactive to active): set inactive_ed_dt = yesterday (effective from yesterday)
+    else if (prevStatus === 'inactive' && newStatus === 'active') {
+        // Check if this was toggled back on the same day it was set to inactive
+        if (inactive_st_dt === today) {
+            // Same day toggle - clear both dates
+            inactive_st_dt = null;
+            inactive_ed_dt = null;
+        } else {
+            inactive_ed_dt = yesterday;
+        }
+    }
+
     const update = {
         name: document.getElementById('editFullName').value,
         nickname: document.getElementById('editNickname').value,
         route: document.querySelector('input[name="editRoute"]:checked')?.value || 'A',
         plan: document.getElementById('editPlan').value,
         startDate: newStartDate || getToday(),
-        status: document.getElementById('editStatusToggle').checked ? 'active' : 'inactive',
+        status: newStatus,
+        inactive_st_dt,
+        inactive_ed_dt,
         mobile: document.getElementById('editmobile').value,
         discount: parseFloat(document.getElementById('editDiscount').value) || 0,
         paymentType,
@@ -1968,6 +2019,33 @@ async function saveAndShareAdvanceFromEdit() {
     const plan = document.getElementById('editPlan').value;
     
     const newStartDate = document.getElementById('editStartDate').value;
+
+    // Get new status from toggle
+    const newStatus = document.getElementById('editStatusToggle').checked ? 'active' : 'inactive';
+    const prevStatus = previousStatus || 'active';
+
+    // Handle inactive date logic
+    let inactive_st_dt = cust.inactive_st_dt;
+    let inactive_ed_dt = cust.inactive_ed_dt;
+    const today = getToday();
+    const yesterday = getYesterday();
+
+    // On → Off (active to inactive): set inactive_st_dt = today, clear inactive_ed_dt
+    if (prevStatus === 'active' && newStatus === 'inactive') {
+        inactive_st_dt = today;
+        inactive_ed_dt = null;
+    }
+    // Off → On (inactive to active): set inactive_ed_dt = yesterday (effective from yesterday)
+    else if (prevStatus === 'inactive' && newStatus === 'active') {
+        // Check if this was toggled back on the same day it was set to inactive
+        if (inactive_st_dt === today) {
+            // Same day toggle - clear both dates
+            inactive_st_dt = null;
+            inactive_ed_dt = null;
+        } else {
+            inactive_ed_dt = yesterday;
+        }
+    }
     
     // Save the profile update - overwrite advance amount (replace existing)
     const update = {
@@ -1976,7 +2054,9 @@ async function saveAndShareAdvanceFromEdit() {
         route: document.querySelector('input[name="editRoute"]:checked')?.value || 'A',
         plan: plan,
         startDate: newStartDate || getToday(),
-        status: document.getElementById('editStatusToggle').checked ? 'active' : 'inactive',
+        status: newStatus,
+        inactive_st_dt,
+        inactive_ed_dt,
         mobile: document.getElementById('editmobile').value,
         discount: parseFloat(document.getElementById('editDiscount').value) || 0,
         paymentType: 'prepaid',
@@ -2009,6 +2089,7 @@ window.closeEditModal = function () {
     if (modal) modal.classList.add('hidden');
     currentEditingId = null;
     currentEditingCust = null;
+    previousStatus = null;
 };
 // V1.5 Walk-in Logic
 // Update Walk-In counts (Stored under customerId: 0)
@@ -2833,6 +2914,10 @@ async function processRouteShare(route) {
 
 // Initialize startDate for all customers from first attendance
 async function initializeCustomerStartDates() {
+    // Check if already initialized
+    const isInitialized = await db.settings.get('startDateInitialized');
+    if (isInitialized) return 0;
+    
     const customers = await db.customers.toArray();
     let updated = 0;
     
@@ -2853,7 +2938,56 @@ async function initializeCustomerStartDates() {
     if (updated > 0) {
         console.log(`Initialized startDate for ${updated} customers`);
     }
+    
+    // Mark as initialized
+    await db.settings.put({ id: 'startDateInitialized', value: 'true' });
     return updated;
+}
+
+// Add one day to date string (YYYY-MM-DD)
+function addOneDay(dateStr) {
+    const d = new Date(dateStr);
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().split('T')[0];
+}
+
+// Initialize inactive_st_dt for existing inactive customers (run once)
+function initializeInactiveDates() {
+    // Check if already initialized
+    db.settings.get('inactiveDatesInitialized').then(isInitialized => {
+        if (isInitialized) return;
+        
+        // Find inactive customers without inactive_st_dt
+        db.customers.toArray().then(allCustomers => {
+            const needsInit = allCustomers.filter(c => 
+                c.status === 'inactive' && !c.inactive_st_dt
+            );
+            
+            if (needsInit.length === 0) {
+                db.settings.put({ id: 'inactiveDatesInitialized', value: 'true' });
+                return;
+            }
+            
+            // Process in background (non-blocking) - delay to let page load first
+            setTimeout(async () => {
+                for (const cust of needsInit) {
+                    const lastAttendance = await db.attendance
+                        .where('custId').equals(cust.id)
+                        .reverse()
+                        .sortBy('date');
+                    
+                    if (lastAttendance && lastAttendance.length > 0) {
+                        const lastDate = lastAttendance[0].date;
+                        const nextDay = addOneDay(lastDate);
+                        await db.customers.update(cust.id, { inactive_st_dt: nextDay });
+                    }
+                }
+                
+                await db.settings.put({ id: 'inactiveDatesInitialized', value: 'true' });
+                console.log(`Initialized inactive_st_dt for ${needsInit.length} customers`);
+            }, 2000); // Delay 2 seconds to not block initial render
+        });
+    });
 }
 
 // Get route identifiers from local settings DB (master record)
@@ -3595,7 +3729,8 @@ async function assignDailyAddonsToPremium() {
     const customers = await db.customers.toArray();
     const premiumCustomers = customers.filter(c => 
         c.plan && c.plan.toLowerCase().includes('premium') && 
-        c.status !== 'inactive'
+        c.status !== 'inactive' &&
+        !isInInactivePeriod(c, today)
     );
     
     // Assign addons round-robin based on number of selected addons

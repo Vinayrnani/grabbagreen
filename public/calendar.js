@@ -20,12 +20,17 @@ async function renderCalendar() {
     if (label) {
         label.innerText = new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(currentDisplayDate);
     }
-    // 2. Fetch Data: Attendance + Holiday List from Settings
-    const [attendanceRecords, holidayData] = await Promise.all([
+    // 2. Fetch Data: Attendance + Holiday List + Customer Inactive Dates from Settings
+    const [attendanceRecords, holidayData, customer] = await Promise.all([
         db.attendance.where('custId').equals(customerId).filter(r => r.date.startsWith(monthPrefix)).toArray(),
-        db.settings.get('holidayList')
+        db.settings.get('holidayList'),
+        db.customers.get(customerId)
     ]);
     const dynamicHolidays = holidayData ? holidayData.value : [];
+    
+    // Get customer inactive dates
+    const inactive_st_dt = customer?.inactive_st_dt;
+    const inactive_ed_dt = customer?.inactive_ed_dt || '9999-12-31';
 
     // 3. Map Attendance for lookup
     const dayMap = {};
@@ -71,13 +76,17 @@ async function renderCalendar() {
         let textColor = "text-gray-600";
         let dotsHtml = "";
 
-        // Background Priority: Holiday (Cyan) > Sunday (Amber)
+        // Background Priority: Holiday (Cyan) > Sunday (Amber) > Inactive (Gray)
         if (isHoliday) {
             bgColor = "bg-cyan-100";
             textColor = "text-cyan-800";
         } else if (isSunday) {
             bgColor = "bg-amber-100";
             textColor = "text-amber-800";
+        } else if (!data && inactive_st_dt && dateStr >= inactive_st_dt && dateStr <= inactive_ed_dt) {
+            // Inactive days without attendance - show gray background
+            bgColor = "bg-gray-200";
+            textColor = "text-gray-400";
         }
 
         if (data) {

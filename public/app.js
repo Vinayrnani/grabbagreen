@@ -120,9 +120,10 @@ function setPackageFilter(plan) {
 
 // Update filter pills with counts
 function updateFilterPills(activeCustomers, attendanceMap) {
-    const plans = ['all', 'Regular', 'Premium', 'Couple', 'MealBox'];
-    const abbreviations = { all: 'All', Regular: 'R', Premium: 'P', Couple: 'CP', MealBox: 'M' };
+    const plans = ['pending', 'all', 'Regular', 'Premium', 'Couple', 'MealBox'];
+    const abbreviations = { pending: 'Pending', all: 'All', Regular: 'R', Premium: 'P', Couple: 'CP', MealBox: 'M' };
     const colors = {
+        pending: 'bg-orange-500 text-white',
         all: 'bg-gray-800 text-white',
         Regular: 'bg-emerald-500 text-white',
         Premium: 'bg-amber-500 text-white',
@@ -135,20 +136,25 @@ function updateFilterPills(activeCustomers, attendanceMap) {
         if (!btn) return;
         
         let total, marked;
-        if (plan === 'all') {
+        
+        if (plan === 'pending') {
+            // Pending: count customers WITHOUT attendance
+            total = activeCustomers.filter(c => !attendanceMap.has(c.id)).length;
+            btn.textContent = `Pending ${total}`;
+        } else if (plan === 'all') {
             // Count all active customers
             total = activeCustomers.length;
             marked = activeCustomers.filter(c => attendanceMap.has(c.id)).length;
+            const checkmark = (marked === total && total > 0) ? '✓ ' : '';
+            btn.textContent = `${checkmark}All ${marked}/${total}`;
         } else {
             // Count active customers for this plan
             const planCustomers = activeCustomers.filter(c => c.plan === plan);
             total = planCustomers.length;
             marked = planCustomers.filter(c => attendanceMap.has(c.id)).length;
+            const checkmark = (marked === total && total > 0) ? '✓ ' : '';
+            btn.textContent = `${checkmark}${abbreviations[plan]} ${marked}/${total}`;
         }
-        
-        // Update text - add checkmark if all marked
-        const checkmark = (marked === total && total > 0) ? '✓ ' : '';
-        btn.textContent = `${checkmark}${abbreviations[plan]} ${marked}/${total}`;
         
         // Update styling - match card badge colors exactly
         btn.className = 'filter-pill px-3 py-1 rounded-full text-[10px] font-bold transition-all';
@@ -642,8 +648,11 @@ async function renderList() {
     // Update filter pills with counts (before applying package filter)
     updateFilterPills(activeCustomers, attendanceMap);
 
-    // Apply package filter if set (and not 'all')
-    if (currentPackageFilter !== 'all') {
+    // Apply package filter if set
+    if (currentPackageFilter === 'pending') {
+        // Show only unmarked customers (no attendance for this date)
+        activeCustomers = activeCustomers.filter(c => !attendanceMap.has(c.id));
+    } else if (currentPackageFilter !== 'all') {
         activeCustomers = activeCustomers.filter(c => c.plan === currentPackageFilter);
     }
 
@@ -3253,6 +3262,7 @@ function closeMissingAttendanceModal() {
 
 function goToDate(dateStr) {
     closeMissingAttendanceModal();
+    currentPackageFilter = 'pending';
     changeAppDate(dateStr);
 }
 
@@ -3280,12 +3290,6 @@ async function cleanupOldDeliveryRecords() {
     }
 }
 async function hardRefreshApp() {
-    // Clear ALL localStorage completely
-    localStorage.clear();
-    
-    // Also clear sessionStorage
-    sessionStorage.clear();
-
     try {
         // 1. Clear all named caches (where JS, CSS, and HTML are stored)
         if ('caches' in window) {

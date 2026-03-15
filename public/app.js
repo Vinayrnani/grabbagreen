@@ -3398,7 +3398,7 @@ async function showMissingAttendanceModal(missingByDate) {
         
         let customerListHtml;
         if (dayAttendance === 0) {
-            customerListHtml = '<div class="text-gray-400 italic">No one has attendance on this day, if it is a holiday please add this date in holiday manager in settings</div>';
+            customerListHtml = '<div class="text-gray-400 italic">No one has attendance on this day, if it is a holiday please add this date to holiday list in settings</div>';
         } else {
             customerListHtml = customers.map(name => `<div class="text-gray-600">- ${name}</div>`).join('');
         }

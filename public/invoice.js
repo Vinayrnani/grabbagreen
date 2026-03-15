@@ -697,11 +697,14 @@ async function renderInvoices() {
 
 async function openInvoiceDetail(invoiceId) {
     currentInvoiceId = invoiceId;
+    currentInvoiceEditMode = false;
+    editedItems = {};
     const invoice = await db.invoices.get(invoiceId);
     const cust = await db.customers.get(invoice.custId);
     const items = await db.invoiceItems.where({invoiceId}).toArray();
     const adjustments = await db.invoiceAdjustments.where({invoiceId}).toArray();
     const payments = await db.payments.where({invoiceId}).toArray();
+    currentInvoiceData = { invoice, cust, items, adjustments, payments };
     
     document.getElementById('detailInvoiceNumber').textContent = invoice.invoiceNumber;
     document.getElementById('detailInvoiceDate').textContent = new Date(invoice.generatedAt).toLocaleDateString();
@@ -788,6 +791,22 @@ async function openInvoiceDetail(invoiceId) {
 function closeInvoiceDetailModal() {
     document.getElementById('invoiceDetailModal').classList.add('hidden');
     currentInvoiceId = null;
+    currentInvoiceEditMode = false;
+    editedItems = {};
+    
+    const editBtn = document.getElementById('editInvoiceBtn');
+    const viewActions = document.getElementById('viewModeActions');
+    const editActions = document.getElementById('editModeActions');
+    const addItemBtn = document.getElementById('addLineItemBtn');
+    
+    if (editBtn) {
+        editBtn.textContent = 'Edit';
+        editBtn.className = 'px-3 py-1.5 bg-blue-600 text-white text-sm font-bold rounded-lg';
+    }
+    if (viewActions) viewActions.classList.remove('hidden');
+    if (editActions) editActions.classList.add('hidden');
+    if (addItemBtn) addItemBtn.classList.add('hidden');
+    
     renderInvoices();
 }
 
@@ -915,4 +934,229 @@ async function calculateWorkingDays(monthYear) {
         if (dayOfWeek !== 0 && !holidays.includes(dateStr)) workingDays++;
     }
     return workingDays;
+}
+
+let currentInvoiceEditMode = false;
+let currentInvoiceData = null;
+let editedItems = {};
+
+function toggleInvoiceEditMode() {
+    currentInvoiceEditMode = !currentInvoiceEditMode;
+    
+    const editBtn = document.getElementById('editInvoiceBtn');
+    const viewActions = document.getElementById('viewModeActions');
+    const editActions = document.getElementById('editModeActions');
+    const addItemBtn = document.getElementById('addLineItemBtn');
+    
+    if (currentInvoiceEditMode) {
+        editBtn.textContent = 'Cancel';
+        editBtn.className = 'px-3 py-1.5 bg-gray-500 text-white text-sm font-bold rounded-lg';
+        viewActions.classList.add('hidden');
+        editActions.classList.remove('hidden');
+        addItemBtn.classList.remove('hidden');
+        editedItems = {};
+        renderLineItemsForEdit(currentInvoiceData);
+    } else {
+        editBtn.textContent = 'Edit';
+        editBtn.className = 'px-3 py-1.5 bg-blue-600 text-white text-sm font-bold rounded-lg';
+        viewActions.classList.remove('hidden');
+        editActions.classList.add('hidden');
+        addItemBtn.classList.add('hidden');
+        editedItems = {};
+        renderLineItemsForView(currentInvoiceData);
+    }
+}
+
+function renderLineItemsForView(invoiceData) {
+    const itemsContainer = document.getElementById('detailLineItems');
+    itemsContainer.innerHTML = '';
+    
+    const { items } = invoiceData;
+    items.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'flex justify-between items-center py-2 border-b border-gray-100';
+        div.innerHTML = `
+            <div>
+                <p class="font-bold text-sm">${item.description}</p>
+                <p class="text-xs text-gray-400">${item.quantity} × Rs. ${formatINR(item.unitPrice)}</p>
+            </div>
+            <p class="font-bold">Rs. ${formatINR(item.amount)}</p>
+        `;
+        itemsContainer.appendChild(div);
+    });
+}
+
+function renderLineItemsForEdit(invoiceData) {
+    const itemsContainer = document.getElementById('detailLineItems');
+    itemsContainer.innerHTML = '';
+    
+    const { items, invoice, cust, adjustments, payments } = invoiceData;
+    
+    items.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'bg-gray-50 rounded-xl p-2 mb-2';
+        div.dataset.itemId = item.id;
+        div.innerHTML = `
+            <div class="mb-2">
+                <input type="text" value="${item.description}" 
+                    oninput="updateItemField(${item.id}, 'description', this.value)"
+                    class="w-full p-1.5 bg-white rounded-lg border border-gray-200 font-bold text-sm"
+                    placeholder="Description">
+            </div>
+            <div class="flex gap-1 items-center flex-wrap">
+                <input type="number" value="${item.quantity}" 
+                    oninput="updateItemField(${item.id}, 'quantity', this.value)"
+                    min="0" step="1"
+                    class="w-14 p-1.5 bg-white rounded-lg border border-gray-200 font-bold text-sm text-center"
+                    placeholder="Qty">
+                <span class="text-gray-400 text-xs">×</span>
+                <input type="number" value="${item.unitPrice}" 
+                    oninput="updateItemField(${item.id}, 'unitPrice', this.value)"
+                    min="0" step="0.01"
+                    class="w-18 p-1.5 bg-white rounded-lg border border-gray-200 font-bold text-sm text-center"
+                    placeholder="Price">
+                <span class="text-gray-400 text-xs">=</span>
+                <span class="w-18 text-right font-bold text-green-600 text-sm" id="item-amount-${item.id}">
+                    Rs. ${formatINR(item.amount)}
+                </span>
+            </div>
+        `;
+        itemsContainer.appendChild(div);
+    });
+    
+    updateLiveTotals(invoiceData);
+}
+
+function updateItemField(itemId, field, value) {
+    if (!editedItems[itemId]) {
+        const item = currentInvoiceData.items.find(i => i.id === itemId);
+        editedItems[itemId] = { ...item };
+    }
+    
+    if (field === 'quantity') {
+        editedItems[itemId].quantity = parseInt(value) || 0;
+    } else if (field === 'unitPrice') {
+        editedItems[itemId].unitPrice = parseFloat(value) || 0;
+    } else if (field === 'description') {
+        editedItems[itemId].description = value;
+    }
+    
+    const item = editedItems[itemId];
+    const newAmount = item.quantity * item.unitPrice;
+    editedItems[itemId].amount = newAmount;
+    
+    document.getElementById(`item-amount-${itemId}`).textContent = `Rs. ${formatINR(newAmount)}`;
+    
+    updateLiveTotals(currentInvoiceData);
+}
+
+function updateLiveTotals(invoiceData) {
+    const { items, adjustments, payments, cust } = invoiceData;
+    
+    let subTotal = 0;
+    items.forEach(item => {
+        if (editedItems[item.id]) {
+            subTotal += editedItems[item.id].amount;
+        } else {
+            subTotal += item.amount;
+        }
+    });
+    
+    const discountAmount = subTotal * ((cust.discount || 0) / 100);
+    const adjustmentsTotal = adjustments.reduce((sum, adj) => 
+        sum + (adj.type === 'credit' ? -adj.amount : adj.amount), 0);
+    const total = subTotal - discountAmount + adjustmentsTotal;
+    const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
+    const balanceDue = Math.max(0, total - totalPaid);
+    
+    document.getElementById('detailSubtotal').textContent = `Rs. ${formatINR(subTotal)}`;
+    document.getElementById('detailDiscount').textContent = `-Rs. ${formatINR(discountAmount)}`;
+    document.getElementById('detailTotal').textContent = `Rs. ${formatINR(total)}`;
+    document.getElementById('detailBalance').textContent = `Rs. ${formatINR(balanceDue)}`;
+}
+
+async function saveInvoiceEdits() {
+    if (Object.keys(editedItems).length === 0) {
+        toggleInvoiceEditMode();
+        return;
+    }
+    
+    for (const [itemId, updates] of Object.entries(editedItems)) {
+        await updateInvoiceItem(parseInt(itemId), updates);
+    }
+    
+    editedItems = {};
+    await recalculateInvoiceTotals(currentInvoiceId, currentInvoiceData.cust);
+    
+    currentInvoiceData = await fetchInvoiceData(currentInvoiceId);
+    toggleInvoiceEditMode();
+    openInvoiceDetail(currentInvoiceId);
+}
+
+function cancelInvoiceEdit() {
+    editedItems = {};
+    toggleInvoiceEditMode();
+}
+
+function showAddLineItemModal() {
+    document.getElementById('newLineItemDescription').value = '';
+    document.getElementById('newLineItemQuantity').value = '1';
+    document.getElementById('newLineItemUnitPrice').value = '';
+    document.getElementById('newLineItemAmount').textContent = '₹0';
+    document.getElementById('addLineItemModal').classList.remove('hidden');
+    
+    document.getElementById('newLineItemQuantity').oninput = calculateNewItemAmount;
+    document.getElementById('newLineItemUnitPrice').oninput = calculateNewItemAmount;
+}
+
+function calculateNewItemAmount() {
+    const qty = parseInt(document.getElementById('newLineItemQuantity').value) || 0;
+    const price = parseFloat(document.getElementById('newLineItemUnitPrice').value) || 0;
+    document.getElementById('newLineItemAmount').textContent = `Rs. ${formatINR(qty * price)}`;
+}
+
+function closeAddLineItemModal() {
+    document.getElementById('addLineItemModal').classList.add('hidden');
+}
+
+async function saveNewLineItem() {
+    const description = document.getElementById('newLineItemDescription').value;
+    const quantity = parseInt(document.getElementById('newLineItemQuantity').value) || 0;
+    const unitPrice = parseFloat(document.getElementById('newLineItemUnitPrice').value) || 0;
+    
+    if (!description || quantity <= 0 || unitPrice <= 0) {
+        alert('Please fill all fields with valid values');
+        return;
+    }
+    
+    await db.invoiceItems.add({
+        invoiceId: currentInvoiceId,
+        type: 'custom',
+        description,
+        quantity,
+        unitPrice,
+        amount: quantity * unitPrice,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+    });
+    
+    await recalculateInvoiceTotals(currentInvoiceId, currentInvoiceData.cust);
+    
+    closeAddLineItemModal();
+    currentInvoiceData = await fetchInvoiceData(currentInvoiceId);
+    
+    if (currentInvoiceEditMode) {
+        renderLineItemsForEdit(currentInvoiceData);
+    } else {
+        openInvoiceDetail(currentInvoiceId);
+    }
+}
+
+async function fetchInvoiceData(invoiceId) {
+    const invoice = await db.invoices.get(invoiceId);
+    const cust = await db.customers.get(invoice.custId);
+    const items = await db.invoiceItems.where({invoiceId}).toArray();
+    const adjustments = await db.invoiceAdjustments.where({invoiceId}).toArray();
+    const payments = await db.payments.where({invoiceId}).toArray();
+    return { invoice, cust, items, adjustments, payments };
 }

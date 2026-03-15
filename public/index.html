@@ -282,33 +282,35 @@
             <div id="calendarGrid" class="grid grid-cols-7 gap-2 pb-1 pt-1"></div>
 
             <div
-                class="mt-2 flex flex-wrap justify-around gap-y-4 p-1 bg-white rounded-3xl border border-gray-100 shadow-sm mb-3">
-                <div class="flex items-center gap-2">
-                    <div class="w-3 h-3 bg-red-400 rounded-full"></div>
-                    <span class="text-[10px] font-bold uppercase text-gray-500">Skipped</span>
+                class="mt-2 flex flex-wrap justify-around gap-y-2 p-1 bg-white rounded-3xl border border-gray-100 shadow-sm mb-3">
+                <div class="flex items-center gap-1">
+                    <div class="w-2.5 h-2.5 bg-green-500 rounded-full"></div>
+                    <span class="text-[9px] font-bold uppercase text-gray-500">Delivered</span>
                 </div>
-                <div class="flex items-center gap-2">
-                    <div class="w-3 h-3 bg-green-500 rounded-full"></div>
-                    <span class="text-[10px] font-bold uppercase text-gray-500">Delivered</span>
+                <div class="flex items-center gap-1">
+                    <div class="w-2.5 h-2.5 bg-orange-500 rounded-full"></div>
+                    <span class="text-[9px] font-bold uppercase text-gray-500">Partial</span>
                 </div>
-
-                <div class="flex items-center gap-2">
-                    <div class="w-3 h-3 bg-blue-500 rounded-full"></div>
-                    <span class="text-[10px] font-bold uppercase text-gray-500">Add-on</span>
+                <div class="flex items-center gap-1">
+                    <div class="w-2.5 h-2.5 bg-red-400 rounded-full"></div>
+                    <span class="text-[9px] font-bold uppercase text-gray-500">Skipped</span>
                 </div>
-                <div class="flex items-center gap-2">
-                    <div class="w-4 h-4 bg-amber-100 border border-amber-200 rounded-md"></div>
-                    <span class="text-[10px] font-bold uppercase text-gray-500">Sunday</span>
+                <div class="flex items-center gap-1">
+                    <div class="w-2.5 h-2.5 bg-blue-500 rounded-full"></div>
+                    <span class="text-[9px] font-bold uppercase text-gray-500">Extra Addon</span>
                 </div>
-
-                <div class="flex items-center gap-2">
-                    <div class="w-4 h-4 bg-cyan-100 border border-cyan-200 rounded-md"></div>
-                    <span class="text-[10px] font-bold uppercase text-gray-500">Holiday</span>
+                <div class="flex items-center gap-1">
+                    <div class="w-3 h-3 bg-amber-100 border border-amber-200 rounded-md"></div>
+                    <span class="text-[9px] font-bold uppercase text-gray-500">Sunday</span>
                 </div>
-
-
-
-
+                <div class="flex items-center gap-1">
+                    <div class="w-3 h-3 bg-cyan-100 border border-cyan-200 rounded-md"></div>
+                    <span class="text-[9px] font-bold uppercase text-gray-500">Holiday</span>
+                </div>
+                <div class="flex items-center gap-1">
+                    <div class="w-3 h-3 bg-gray-200 border border-gray-300 rounded-md"></div>
+                    <span class="text-[9px] font-bold uppercase text-gray-500">Inactive</span>
+                </div>
             </div>
         </div>
 
@@ -585,7 +587,10 @@
                     <h2 id="detailInvoiceNumber" class="text-xl font-black text-gray-800"></h2>
                     <span id="detailInvoiceStatus" class="px-2 py-0.5 rounded-full text-[10px] font-bold"></span>
                 </div>
-                <button onclick="closeInvoiceDetailModal()" class="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-200">✕</button>
+                <div class="flex items-center gap-2">
+                    <button id="editInvoiceBtn" onclick="toggleInvoiceEditMode()" class="px-3 py-1.5 bg-blue-600 text-white text-sm font-bold rounded-lg">Edit</button>
+                    <button onclick="closeInvoiceDetailModal()" class="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-200">✕</button>
+                </div>
             </div>
             <p id="detailInvoiceDate" class="text-xs text-gray-400 font-bold px-4"></p>
             
@@ -598,6 +603,7 @@
                 <div class="mb-4">
                     <div class="flex justify-between items-center mb-2">
                         <h4 class="text-xs font-black uppercase text-gray-400 tracking-widest">Line Items</h4>
+                        <button id="addLineItemBtn" onclick="showAddLineItemModal()" class="text-xs font-bold text-green-600 hidden">+ Add</button>
                     </div>
                     <div id="detailLineItems" class="space-y-2"></div>
                 </div>
@@ -639,7 +645,7 @@
             </div>
             
             <div class="sticky bottom-0 bg-white px-4 pb-4 border-t border-gray-100 rounded-b-3xl">
-                <div class="flex gap-3 mt-3">
+                <div id="viewModeActions" class="flex gap-3 mt-3">
                     <button id="markSentBtn" onclick="markCurrentInvoiceSent()" class="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl">Mark as Sent</button>
                     <div class="relative flex-1">
                         <button onclick="toggleShareDropdown()" class="w-full py-3 bg-green-600 text-white font-bold rounded-xl flex items-center justify-center gap-2">
@@ -657,6 +663,10 @@
                             </button>
                         </div>
                     </div>
+                </div>
+                <div id="editModeActions" class="flex gap-3 mt-3 hidden">
+                    <button onclick="saveInvoiceEdits()" class="flex-1 py-3 bg-green-600 text-white font-bold rounded-xl">Save Changes</button>
+                    <button onclick="cancelInvoiceEdit()" class="flex-1 py-3 bg-gray-500 text-white font-bold rounded-xl">Cancel</button>
                 </div>
             </div>
         </div>
@@ -724,6 +734,35 @@
                     <input type="text" id="paymentNotes" class="w-full mt-2 p-3 bg-gray-50 rounded-xl border-none font-bold" placeholder="Optional">
                 </div>
                 <button onclick="savePayment()" class="w-full py-3 bg-green-600 text-white font-bold rounded-xl">Record Payment</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Line Item Modal -->
+    <div id="addLineItemModal" class="fixed inset-0 z-[210] hidden flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/50" onclick="closeAddLineItemModal()"></div>
+        <div class="relative bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl">
+            <h3 class="text-lg font-black mb-4">Add Line Item</h3>
+            <div class="space-y-4">
+                <div>
+                    <label class="text-xs font-bold text-gray-400 uppercase">Description</label>
+                    <input type="text" id="newLineItemDescription" class="w-full mt-2 p-3 bg-gray-50 rounded-xl border-none font-bold" placeholder="e.g., Extra salad">
+                </div>
+                <div class="flex gap-3">
+                    <div class="flex-1">
+                        <label class="text-xs font-bold text-gray-400 uppercase">Quantity</label>
+                        <input type="number" id="newLineItemQuantity" class="w-full mt-2 p-3 bg-gray-50 rounded-xl border-none font-bold" placeholder="1" value="1" min="1">
+                    </div>
+                    <div class="flex-1">
+                        <label class="text-xs font-bold text-gray-400 uppercase">Unit Price</label>
+                        <input type="number" id="newLineItemUnitPrice" class="w-full mt-2 p-3 bg-gray-50 rounded-xl border-none font-bold" placeholder="0" min="0">
+                    </div>
+                </div>
+                <div class="bg-gray-50 rounded-xl p-3 flex justify-between items-center">
+                    <span class="text-sm font-bold text-gray-600">Amount</span>
+                    <span id="newLineItemAmount" class="text-lg font-black text-green-600">₹0</span>
+                </div>
+                <button onclick="saveNewLineItem()" class="w-full py-3 bg-gray-900 text-white font-bold rounded-xl">Add Item</button>
             </div>
         </div>
     </div>

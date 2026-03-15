@@ -1644,9 +1644,18 @@ function canExecuteAction(actionName) {
     return true;
 }
 function confirmDateAction(actionType) {
+    // Block delivered/skipped for future dates, allow vacation
+    if (selectedDate > trueToday) {
+        if (actionType === 'VACATION') return true;
+        alert(`Cannot mark attendance for future dates.`);
+        return false;
+    }
+    
+    // Past dates: warning confirmation
     if (selectedDate !== trueToday) {
         return confirm(`⚠️ ATTENTION: You are viewing ${selectedDate}.\n\nDo you really want to record a ${actionType} for this date instead of today?`);
     }
+    
     return true; // No warning needed for today
 }
 function toggleSettings() {

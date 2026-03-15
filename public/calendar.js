@@ -34,6 +34,7 @@ async function renderCalendar() {
 
     // 3. Map Attendance for lookup
     const dayMap = {};
+    const isCouple = customer.plan === 'Couple';
     attendanceRecords.forEach(rec => {
         // 1. Extract day from date string 'YYYY-MM-DD'
         const day = parseInt(rec.date.split('-')[2]);
@@ -51,7 +52,8 @@ async function renderCalendar() {
         // 4. Map to object for the loop
         dayMap[day] = {
             status: finalStatus, // 'delivered' or 'skipped'
-            hasAddon: hasAddon
+            hasAddon: hasAddon,
+            inclusion: rec.inclusion || 'S1' // Store S1/S2 for couple
         };
     });
 
@@ -93,9 +95,16 @@ async function renderCalendar() {
 
             // Apply Status Backgrounds only if it's a "normal" day
             if (data.status === 'delivered') {
-                if (!isSunday && !isHoliday) bgColor = "bg-green-50";
-                dotsHtml += '<div class="w-1.5 h-1.5 bg-green-500 rounded-full"></div>';
-                textColor = "text-green-700 font-black";
+                // Couple S1 = Partial (green bg + orange dot), Couple S2/Delivered = green
+                if (isCouple && data.inclusion === 'S1') {
+                    if (!isSunday && !isHoliday) bgColor = "bg-green-50";
+                    dotsHtml += '<div class="w-1.5 h-1.5 bg-orange-500 rounded-full"></div>';
+                    textColor = "text-green-700 font-black";
+                } else {
+                    if (!isSunday && !isHoliday) bgColor = "bg-green-50";
+                    dotsHtml += '<div class="w-1.5 h-1.5 bg-green-500 rounded-full"></div>';
+                    textColor = "text-green-700 font-black";
+                }
             } else if (data.status.toLowerCase() === 'skipped') {
                 if (!isSunday && !isHoliday) bgColor = "bg-red-50";
                 dotsHtml += '<div class="w-1.5 h-1.5 bg-red-400 rounded-full"></div>';

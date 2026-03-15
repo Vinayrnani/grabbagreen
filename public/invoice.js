@@ -233,10 +233,82 @@ async function markInvoiceSent(invoiceId) {
     });
 }
 
+// Get missing attendance for a specific month
+async function getMissingAttendanceForMonth(monthYear) {
+    const [year, month] = monthYear.split('-').map(Number);
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Get all customers
+    const allCustomers = await db.customers.toArray();
+    
+    // Filter active customers (considering inactive period)
+    const activeCustomers = allCustomers.filter(c => {
+        if (c.status !== 'inactive') return true;
+        if (!c.inactive_st_dt) return false;
+        const endDt = c.inactive_ed_dt || '9999-12-31';
+        return today < c.inactive_st_dt || today > endDt;
+    });
+    
+    // Get attendance for the month
+    const attendanceRecords = await db.attendance
+        .where('date')
+        .startsWith(monthYear)
+        .toArray();
+    
+    // Get holidays from settings
+    const holidayData = await db.settings.get('holidayList');
+    const holidays = holidayData ? new Set(holidayData.value) : new Set();
+    
+    // Build attendance map
+    const attendanceMap = {};
+    attendanceRecords.forEach(rec => {
+        if (!attendanceMap[rec.custId]) attendanceMap[rec.custId] = new Set();
+        attendanceMap[rec.custId].add(rec.date);
+    });
+    
+    const missingByDate = {};
+    
+    for (const cust of activeCustomers) {
+        // Skip customers who haven't started yet
+        if (cust.startDate && cust.startDate > `${monthYear}-${String(daysInMonth).padStart(2, '0')}`) continue;
+        
+        for (let day = 1; day <= daysInMonth; day++) {
+            const date = new Date(year, month - 1, day);
+            if (date.getDay() === 0) continue; // Skip Sundays
+            
+            const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            
+            // Skip Sundays AND holidays
+            if (holidays.has(dateStr)) continue;
+            
+            // Skip if before customer start date
+            if (cust.startDate && dateStr < cust.startDate) continue;
+            
+            // Check if attendance exists
+            if (!attendanceMap[cust.id] || !attendanceMap[cust.id].has(dateStr)) {
+                if (!missingByDate[dateStr]) missingByDate[dateStr] = [];
+                missingByDate[dateStr].push(cust.nickname || cust.name);
+            }
+        }
+    }
+    
+    return missingByDate;
+}
+
 // Generate all invoices for month
 async function generateAllInvoicesForMonth() {
     const picker = document.getElementById('invoiceMonthPicker');
     const monthYear = picker.value;
+    
+    // Check for missing attendance first
+    const missing = await getMissingAttendanceForMonth(monthYear);
+    
+    if (Object.keys(missing).length > 0) {
+        // Show missing attendance modal - hard block
+        showMissingAttendanceModal(missing);
+        return;
+    }
     
     // Check if invoices already exist for this month
     const existingInvoices = await db.invoices.where('monthYear').equals(monthYear).toArray();

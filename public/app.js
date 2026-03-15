@@ -3354,7 +3354,10 @@ async function pullDeliveryUpdates() {
     }
 }
 
-function showMissingAttendanceModal(missingByDate) {
+async function showMissingAttendanceModal(missingByDate) {
+    // Switch to attendance tab first
+    await showTab('daily');
+    
     const modal = document.getElementById('missingAttendanceModal');
     const container = document.getElementById('missingAttendanceList');
     
@@ -3365,13 +3368,25 @@ function showMissingAttendanceModal(missingByDate) {
     
     let html = '';
     
-    Object.keys(missingByDate).sort().reverse().forEach(dateStr => {
+    const sortedDates = Object.keys(missingByDate).sort().reverse();
+    
+    for (const dateStr of sortedDates) {
         const customers = missingByDate[dateStr];
         const dateObj = new Date(dateStr);
         const dayDiff = Math.floor((new Date() - dateObj) / (1000 * 60 * 60 * 24));
         const label = dateLabels[dayDiff] || dateStr;
         
-                html += `
+        // Check if there's ANY attendance for this date
+        const dayAttendance = await db.attendance.where('date').equals(dateStr).count();
+        
+        let customerListHtml;
+        if (dayAttendance === 0) {
+            customerListHtml = '<div class="text-gray-400 italic">No one has attendance on this day</div>';
+        } else {
+            customerListHtml = customers.map(name => `<div class="text-gray-600">- ${name}</div>`).join('');
+        }
+        
+        html += `
             <div class="mb-4">
                 <div class="flex justify-between items-center">
                     <span class="font-bold text-gray-800">${label}</span>
@@ -3380,15 +3395,17 @@ function showMissingAttendanceModal(missingByDate) {
                     </button>
                 </div>
                 <div class="ml-4 mt-1">
-                    ${customers.map(name => `<div class="text-gray-600">- ${name}</div>`).join('')}
+                    ${customerListHtml}
                 </div>
             </div>
         `;
-    });
+    }
     
     container.innerHTML = html;
     modal.classList.remove('hidden');
 }
+
+window.showMissingAttendanceModal = showMissingAttendanceModal;
 
 function closeMissingAttendanceModal() {
     document.getElementById('missingAttendanceModal').classList.add('hidden');

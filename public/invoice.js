@@ -445,7 +445,7 @@ async function generateInvoicePDF(invoiceId) {
     tableBody.push(['', '', 'Total', `Rs. ${formatINR(lineItemsTotal)}`]);
     
     // Add discount
-    tableBody.push(['', '', 'Discount', `-Rs. ${formatINR(invoice.discountAmount)}`]);
+    tableBody.push(['', '', 'Discount', `Rs. -${formatINR(invoice.discountAmount)}`]);
     
     // Add adjustments
     adjustments.forEach(adj => {
@@ -453,7 +453,7 @@ async function generateInvoicePDF(invoiceId) {
             '',
             '',
             `${adj.type === 'credit' ? 'Credit' : 'Charge'}: ${adj.description}`,
-            `${adj.type === 'credit' ? '-' : '+'}Rs. ${formatINR(adj.amount)}`
+            `${adj.type === 'credit' ? 'Rs. -' : 'Rs. '}${formatINR(adj.amount)}`
         ]);
     });
     
@@ -740,7 +740,7 @@ async function openInvoiceDetail(invoiceId) {
                 </p>
             </div>
             <p class="font-bold ${adj.type === 'credit' ? 'text-green-600' : 'text-red-600'}">
-                ${adj.type === 'credit' ? '-' : '+'}Rs. ${formatINR(adj.amount)}
+                ${adj.type === 'credit' ? 'Rs. -' : 'Rs. '}${formatINR(adj.amount)}
             </p>
         `;
         adjContainer.appendChild(div);
@@ -759,7 +759,7 @@ async function openInvoiceDetail(invoiceId) {
     const balanceDue = balanceDuePaise / 100;
     
     document.getElementById('detailSubtotal').textContent = `Rs. ${formatINR(subtotalAfterPaise / 100)}`;
-    document.getElementById('detailDiscount').textContent = `-Rs. ${formatINR(invoice.discountAmount)}`;
+    document.getElementById('detailDiscount').textContent = `Rs. -${formatINR(invoice.discountAmount)}`;
     document.getElementById('detailTotal').textContent = `Rs. ${formatINR(roundedTotal)}`;
     document.getElementById('detailBalance').textContent = `Rs. ${formatINR(Math.max(0, balanceDue))}`;
     
@@ -992,11 +992,15 @@ function renderLineItemsForEdit(invoiceData) {
     
     const { items, invoice, cust, adjustments, payments } = invoiceData;
     
-    items.forEach(item => {
+    items.forEach((item, index) => {
         const div = document.createElement('div');
-        div.className = 'bg-gray-50 rounded-xl p-2 mb-2';
+        div.className = 'bg-gray-50 rounded-xl p-2 mb-2 relative';
         div.dataset.itemId = item.id;
         div.innerHTML = `
+            <button onclick="removeLineItem(${item.id})" 
+                class="${index === 0 ? 'hidden' : ''} absolute top-1 right-1 w-5 h-5 bg-red-100 rounded-full text-red-500 text-xs font-bold flex items-center justify-center">
+                ✕
+            </button>
             <div class="mb-2">
                 <input type="text" value="${item.description}" 
                     oninput="updateItemField(${item.id}, 'description', this.value)"
@@ -1025,6 +1029,14 @@ function renderLineItemsForEdit(invoiceData) {
     });
     
     updateLiveTotals(invoiceData);
+}
+
+async function removeLineItem(itemId) {
+    if (!confirm('Remove this line item?')) return;
+    
+    await deleteInvoiceItem(itemId);
+    currentInvoiceData = await fetchInvoiceData(currentInvoiceId);
+    renderLineItemsForEdit(currentInvoiceData);
 }
 
 function updateItemField(itemId, field, value) {
@@ -1070,7 +1082,7 @@ function updateLiveTotals(invoiceData) {
     const balanceDue = Math.max(0, total - totalPaid);
     
     document.getElementById('detailSubtotal').textContent = `Rs. ${formatINR(subTotal)}`;
-    document.getElementById('detailDiscount').textContent = `-Rs. ${formatINR(discountAmount)}`;
+    document.getElementById('detailDiscount').textContent = `Rs. -${formatINR(discountAmount)}`;
     document.getElementById('detailTotal').textContent = `Rs. ${formatINR(total)}`;
     document.getElementById('detailBalance').textContent = `Rs. ${formatINR(balanceDue)}`;
 }

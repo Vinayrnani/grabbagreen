@@ -2228,7 +2228,15 @@ async function showTab(tabName) {
         
         // Restore customer selector AFTER populating dropdown options
         const selector = document.getElementById('calendarCustomerSelector');
-        if (selector) selector.value = currentCalendarCustomer;
+        if (selector && selector.options.length > 0) {
+            const validOptions = Array.from(selector.options).map(o => o.value);
+            if (validOptions.includes(String(currentCalendarCustomer))) {
+                selector.value = currentCalendarCustomer;
+            } else {
+                selector.value = selector.options[0].value;
+                currentCalendarCustomer = selector.options[0].value;
+            }
+        }
         
         renderCalendar();
     }

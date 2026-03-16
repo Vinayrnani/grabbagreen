@@ -14,7 +14,9 @@ db.version(18).stores({
     invoiceAdjustments: '++id, invoiceId, type, description, amount, createdAt, updatedAt',
     payments: '++id, invoiceId, amount, date, method, notes, createdAt, updatedAt'
 }).upgrade(tx => {
-    const now = new Date().toISOString();
+    // IST Timezone (IST = UTC+5:30)
+    const IST_OFFSET = 5.5 * 60 * 60 * 1000;
+    const now = new Date(Date.now() + IST_OFFSET).toISOString();
     
     // Migrate all tables - add timestamps if missing
     const tables = ['customers', 'attendance', 'invoices', 'invoiceItems', 'invoiceAdjustments', 'payments'];

@@ -3245,14 +3245,15 @@ async function pullDeliveryUpdates() {
     let totalPulled = 0;
     
     try {
-        // Check past 7 days
-        for (let i = 0; i < 7; i++) {
-            const checkDate = new Date();
+        // Check past 7 days from yesterday in IST
+        for (let i = 1; i <= 7; i++) {
+            const checkDate = getISTDate();
             checkDate.setDate(checkDate.getDate() - i);
             const dateStr = checkDate.toISOString().split('T')[0];
             
-            // Skip Sundays and holidays
-            const isSunday = checkDate.getDay() === 0;
+            // Skip Sundays and holidays - check in IST
+            const dateInIST = new Date(dateStr + 'T12:00:00+05:30');
+            const isSunday = dateInIST.getDay() === 0;
             const holidayData = await db.settings.get('holidayList');
             const dynamicHolidays = holidayData ? holidayData.value : [];
             const isHoliday = dynamicHolidays.includes(dateStr);

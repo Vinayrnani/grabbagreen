@@ -287,11 +287,11 @@ async function getMissingAttendanceForMonth(monthYear) {
         if (cust.startDate && cust.startDate > `${monthYear}-${String(daysInMonth).padStart(2, '0')}`) continue;
         
         for (let day = 1; day <= daysInMonth; day++) {
-            // Create date in IST to correctly identify Sundays
-            const date = new Date(Date.UTC(year, month - 1, day, 18, 30, 0));
-            if (date.getDay() === 0) continue; // Skip Sundays
-            
             const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            
+            // Check if Sunday in IST - use noon to avoid midnight boundary
+            const dateInIST = new Date(dateStr + 'T12:00:00+05:30');
+            if (dateInIST.getDay() === 0) continue; // Skip Sundays
             
             // Skip Sundays AND holidays
             if (holidays.has(dateStr)) continue;

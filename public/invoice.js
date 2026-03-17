@@ -43,6 +43,10 @@ function getISTMonthYear() {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
+function istDay(dateStr) {
+    return new Date(dateStr + 'T00:00:00+05:30').getDay();
+}
+
 // Generate invoice number
 async function generateInvoiceNumber(monthYear) {
     const allInvoices = await db.invoices.toArray();
@@ -289,9 +293,8 @@ async function getMissingAttendanceForMonth(monthYear) {
         for (let day = 1; day <= daysInMonth; day++) {
             const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
             
-            // Check if Sunday in IST - use noon to avoid midnight boundary
-            const dateInIST = new Date(dateStr + 'T12:00:00+05:30');
-            if (dateInIST.getDay() === 0) continue; // Skip Sundays
+            // Check if Sunday in IST
+            if (istDay(dateStr) === 0) continue; // Skip Sundays
             
             // Skip Sundays AND holidays
             if (holidays.has(dateStr)) continue;
@@ -944,7 +947,7 @@ async function calculateWorkingDays(monthYear) {
     let workingDays = 0;
     for (let d = 1; d <= daysInMonth; d++) {
         const dateStr = `${monthYear}-${String(d).padStart(2, '0')}`;
-        const dayOfWeek = new Date(year, month - 1, d).getDay();
+        const dayOfWeek = istDay(dateStr);
         if (dayOfWeek !== 0 && !holidays.includes(dateStr)) workingDays++;
     }
     return workingDays;

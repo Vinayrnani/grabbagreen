@@ -285,14 +285,28 @@ function loadPendingAddons() {
     }
 }
 
-const now = new Date();
-const offset = now.getTimezoneOffset() * 60000; // offset in milliseconds
-const localISOTime = new Date(now - offset).toISOString().split('T')[0];
+// IST Offset = UTC+5:30
+const IST_OFFSET = 5.5 * 60 * 60 * 1000;
+
+function istNow() { 
+    return new Date(Date.now() + IST_OFFSET); 
+}
+
+function istDateStr() { 
+    return istNow().toISOString().split('T')[0]; 
+}
+
+function istDay(dateStr) { 
+    return new Date(dateStr + 'T00:00:00+05:30').getDay(); 
+}
+
+function istTimestamp() {
+    return istNow().toISOString();
+}
+
+const localISOTime = istDateStr();
 
 let selectedDate = localISOTime;
-
-// Utility to get YYYY-MM-DD
-//const getToday = () => new Date().toISOString().split('T')[0];
 
 // Helper function to generate a single card HTML
 function generateCardHTML(cust, todayEntry, attendanceMap, coupleAddonCounts, viewDate) {
@@ -1682,7 +1696,7 @@ async function exportData() {
     try {
         const backupData = {
             version: 2,
-            timestamp: new Date().toISOString(),
+            timestamp: istTimestamp(),
             tables: {}
         };
 
@@ -2447,7 +2461,7 @@ async function syncToCloud(token) {
 
         await fs.collection('sync_groups').doc(token).set({
             token: token,
-            lastUpdated: new Date().toISOString(),
+            lastUpdated: istTimestamp(),
             deviceInfo: navigator.userAgent.substring(0, 20),
             data: allData // Contains every table
         });
@@ -2845,7 +2859,7 @@ async function openRouteShareSelector() {
 
 async function processRouteShare(route) {
     const dateInput = document.getElementById('dateJump');
-    const date = dateInput?.value || new Date().toISOString().split('T')[0];
+    const date = dateInput?.value || istDateStr();
 
     const attendance = await db.attendance.where('date').equals(date).toArray();
 
@@ -3247,13 +3261,12 @@ async function pullDeliveryUpdates() {
     try {
         // Check past 7 days from yesterday in IST
         for (let i = 1; i <= 7; i++) {
-            const checkDate = getISTDate();
+            const checkDate = istNow();
             checkDate.setDate(checkDate.getDate() - i);
             const dateStr = checkDate.toISOString().split('T')[0];
             
             // Skip Sundays and holidays - check in IST
-            const dateInIST = new Date(dateStr + 'T12:00:00+05:30');
-            const isSunday = dateInIST.getDay() === 0;
+            const isSunday = istDay(dateStr) === 0;
             const holidayData = await db.settings.get('holidayList');
             const dynamicHolidays = holidayData ? holidayData.value : [];
             const isHoliday = dynamicHolidays.includes(dateStr);

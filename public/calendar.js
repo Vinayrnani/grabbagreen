@@ -1,6 +1,21 @@
 // calendar.js - Calendar view for customer attendance
 
-let currentDisplayDate = new Date();
+// IST Timezone helpers (IST = UTC+5:30)
+const IST_OFFSET = 5.5 * 60 * 60 * 1000;
+
+function istNow() { 
+    return new Date(Date.now() + IST_OFFSET); 
+}
+
+function istDateStr() { 
+    return istNow().toISOString().split('T')[0]; 
+}
+
+function istDay(dateStr) { 
+    return new Date(dateStr + 'T00:00:00+05:30').getDay(); 
+}
+
+let currentDisplayDate = istNow();
 
 async function renderCalendar() {
     const grid = document.getElementById('calendarGrid');

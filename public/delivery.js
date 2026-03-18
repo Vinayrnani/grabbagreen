@@ -551,14 +551,8 @@ function hideLoading() {
     document.getElementById('loadingIndicator').classList.add('hidden');
 }
 
-// IST Timezone helpers (IST = UTC+5:30)
-const IST_OFFSET = 5.5 * 60 * 60 * 1000;
-function getISTDate() {
-    return new Date(Date.now() + IST_OFFSET);
-}
-
 function getToday() {
-    return getISTDate().toISOString().split('T')[0];
+    return window.istDateStr();
 }
 
 async function cleanupOldLocalRecords() {

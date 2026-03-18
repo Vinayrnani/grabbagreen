@@ -30,23 +30,6 @@ function formatINR(amount) {
     return amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-// IST Timezone helpers (IST = UTC+5:30)
-const IST_OFFSET = 5.5 * 60 * 60 * 1000;
-function getISTDate() {
-    return new Date(Date.now() + IST_OFFSET);
-}
-function getISTDateString() {
-    return getISTDate().toISOString().split('T')[0];
-}
-function getISTMonthYear() {
-    const d = getISTDate();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-}
-
-function istDay(dateStr) {
-    return new Date(dateStr + 'T00:00:00+05:30').getDay();
-}
-
 // Generate invoice number
 async function generateInvoiceNumber(monthYear) {
     const allInvoices = await db.invoices.toArray();
@@ -82,7 +65,7 @@ async function generateInvoice(custId, monthYear, invoiceNumber = null) {
         adjustmentsTotal: 0,
         total: 0,
         balanceDue: 0,
-        generatedAt: getISTDate().toISOString()
+        generatedAt: window.istNow().toISOString()
     });
     
     await addInvoiceLineItems(invoiceId, records, cust, monthYear);
@@ -218,7 +201,7 @@ async function recordPayment(invoiceId, amount, method, notes) {
     await db.payments.add({
         invoiceId,
         amount,
-        date: getISTDateString(),
+        date: window.istDateStr(),
         method,
         notes
     });
@@ -246,7 +229,7 @@ async function deleteInvoiceItem(itemId) {
 async function markInvoiceSent(invoiceId) {
     await db.invoices.update(invoiceId, {
         status: 'sent',
-        sentAt: getISTDate().toISOString()
+        sentAt: window.istNow().toISOString()
     });
 }
 
@@ -254,7 +237,7 @@ async function markInvoiceSent(invoiceId) {
 async function getMissingAttendanceForMonth(monthYear) {
     const [year, month] = monthYear.split('-').map(Number);
     const daysInMonth = new Date(year, month, 0).getDate();
-    const today = getISTDateString();
+    const today = window.istDateStr();
     
     // Get all customers
     const allCustomers = await db.customers.toArray();
@@ -390,7 +373,7 @@ async function initializeInvoiceMonthPicker() {
     if (allInvoices.length > 0) {
         picker.value = allInvoices[0].monthYear;
     } else {
-        picker.value = getISTMonthYear();
+        picker.value = window.istMonthYear();
     }
     
     renderInvoices();
@@ -652,7 +635,7 @@ async function renderInvoices() {
     saveScrollPosition('invoiceListContainer');
     const container = document.getElementById('invoiceListContainer');
     const picker = document.getElementById('invoiceMonthPicker');
-    const monthYear = picker.value || getISTMonthYear();
+    const monthYear = picker.value || window.istMonthYear();
     
     if (!container) return;
     
@@ -866,7 +849,7 @@ async function saveAdjustment() {
 async function showRecordPaymentModal() {
     const invoice = await db.invoices.get(currentInvoiceId);
     document.getElementById('paymentAmount').value = invoice.balanceDue;
-    document.getElementById('paymentDate').value = getISTDateString();
+    document.getElementById('paymentDate').value = window.istDateStr();
     document.getElementById('recordPaymentModal').classList.remove('hidden');
 }
 
@@ -1165,8 +1148,8 @@ async function saveNewLineItem() {
         quantity,
         unitPrice,
         amount: quantity * unitPrice,
-        createdAt: getISTDate().toISOString(),
-        updatedAt: getISTDate().toISOString()
+        createdAt: window.istNow().toISOString(),
+        updatedAt: window.istNow().toISOString()
     });
     
     await recalculateInvoiceTotals(currentInvoiceId, currentInvoiceData.cust);

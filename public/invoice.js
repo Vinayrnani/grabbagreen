@@ -315,8 +315,8 @@ async function generateAllInvoicesForMonth() {
     const existingCount = existingInvoices.length;
     
     if (existingCount > 0) {
-        const confirm = window.confirm(`${existingCount} invoice(s) already exist for this month. Regenerate?`);
-        if (!confirm) return;
+        const confirmed = await showConfirmDialog(`${existingCount} invoice(s) already exist for this month. Regenerate?`);
+        if (!confirmed) return;
         await deleteMonthInvoices(monthYear);
     }
     
@@ -345,7 +345,7 @@ async function generateAllInvoicesForMonth() {
         if (invoiceId) generated++;
     }
     
-    alert(`Generated ${generated} invoices`);
+    await showDialog(`Generated ${generated} invoices`, 'success');
     renderInvoices();
     return generated;
 }
@@ -581,17 +581,17 @@ async function shareInvoiceText(invoiceId) {
     }
     
     // Fallback: Use wa.me redirect (works on all browsers)
-    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
-    window.location.assign(whatsappUrl);
+    // const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+    // window.location.assign(whatsappUrl);
     
-    await db.invoices.update(invoiceId, { textShared: true });
+    // await db.invoices.update(invoiceId, { textShared: true });
     
-    invoice = await db.invoices.get(invoiceId);
-    if (invoice.pdfShared) {
-        await markInvoiceSent(invoiceId);
-    }
+    // invoice = await db.invoices.get(invoiceId);
+    // if (invoice.pdfShared) {
+    //     await markInvoiceSent(invoiceId);
+    // }
     
-    openInvoiceDetail(invoiceId);
+    // openInvoiceDetail(invoiceId);
 }
 
 // Share PDF via Native Share
@@ -837,7 +837,7 @@ async function saveAdjustment() {
     const amount = parseFloat(document.getElementById('adjAmount').value);
     
     if (!description || !amount) {
-        alert('Please fill all fields');
+        await showDialog('Please fill all fields', 'warning');
         return;
     }
     
@@ -864,7 +864,7 @@ async function savePayment() {
     const notes = document.getElementById('paymentNotes').value;
     
     if (!amount || !date) {
-        alert('Please fill required fields');
+        await showDialog('Please fill required fields', 'warning');
         return;
     }
     
@@ -1032,7 +1032,7 @@ function renderLineItemsForEdit(invoiceData) {
 }
 
 async function removeLineItem(itemId) {
-    if (!confirm('Remove this line item?')) return;
+    if (!await showConfirmDialog('Remove this line item?')) return;
     
     await deleteInvoiceItem(itemId);
     currentInvoiceData = await fetchInvoiceData(currentInvoiceId);
@@ -1137,7 +1137,7 @@ async function saveNewLineItem() {
     const unitPrice = parseFloat(document.getElementById('newLineItemUnitPrice').value) || 0;
     
     if (!description || quantity <= 0 || unitPrice <= 0) {
-        alert('Please fill all fields with valid values');
+        await showDialog('Please fill all fields with valid values', 'warning');
         return;
     }
     

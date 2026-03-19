@@ -38,12 +38,12 @@ function checkLogin() {
     }
 }
 
-function loginDelivery() {
+async function loginDelivery() {
     const mobileInput = document.getElementById('driverMobile');
     const mobile = mobileInput.value.trim();
     
     if (!mobile || mobile.length < 10) {
-        alert('Please enter a valid mobile number');
+        await showDialog('Please enter a valid mobile number', 'warning');
         return;
     }
     
@@ -176,7 +176,7 @@ async function loadDeliveryRoute() {
         if (localDeliveries.length > 0) {
             renderDeliveryCards(localDeliveries);
         } else {
-            alert('Error loading route. Check internet connection.');
+            await showDialog('Error loading route. Check internet connection.', 'error');
         }
     }
     
@@ -432,7 +432,7 @@ async function markDelivered(custId) {
         
     } catch (error) {
         console.error('Error marking delivered:', error);
-        alert('Error saving. Will retry on next sync.');
+        await showDialog('Error saving. Will retry on next sync.', 'error');
     }
     
     deliveryProcessing = false;
@@ -441,7 +441,7 @@ async function markDelivered(custId) {
 async function resetDelivery() {
     if (!selectedDeliveryCustId) return;
     
-    if (!confirm('Reset attendance for this customer?')) {
+    if (!await showConfirmDialog('Reset attendance for this customer?')) {
         closeActionMenu();
         return;
     }
@@ -471,7 +471,7 @@ async function resetDelivery() {
         
     } catch (error) {
         console.error('Error resetting delivery:', error);
-        alert('Error resetting. Check internet.');
+        await showDialog('Error resetting. Check internet.', 'error');
     }
     
     closeActionMenu();

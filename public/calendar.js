@@ -170,18 +170,18 @@ async function populateCalendarCustomerDropdown() {
     }
 }
 
-function goToAttendanceDate(dateStr) {
+async function goToAttendanceDate(dateStr) {
     const today = istDateStr();
     if (dateStr > today) return;
 
     const d = new Date(dateStr + 'T00:00:00+05:30');
     const formatted = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-    if (!confirm(`Go to attendance for ${formatted}?`)) return;
+    if (!await showConfirmDialog(`Go to attendance for ${formatted}?`)) return;
 
     selectedDate = dateStr;
     document.getElementById('displayDate').innerText =
         d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }).toUpperCase();
-    showTab('attendance');
+    await showTab('attendance');
 }
 
 async function changeMonth(step) {

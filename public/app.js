@@ -787,7 +787,7 @@ let isProcessing = false;
 async function recordAttendance(custId, status) {
     if (isProcessing) return;
     // --- ADDED GUARD ---
-    if (!confirmDateAction(status.toUpperCase())) {
+    if (!await confirmDateAction(status.toUpperCase())) {
         await renderList(); // Reset swipe position
         return;
     }
@@ -800,7 +800,7 @@ async function recordAttendance(custId, status) {
 
         // NEW RULE: Confirmation if skipping with an Add-on
         if (status === 'skipped' && hasPendingAddon) {
-            const confirmSkip = confirm(`Wait! ${customer.nickname || customer.name} has an Add-on requested. If you skip, the Add-on will be removed for today. Proceed?`);
+            const confirmSkip = await showConfirmDialog(`Wait! ${customer.nickname || customer.name} has an Add-on requested. If you skip, the Add-on will be removed for today. Proceed?`);
             if (!confirmSkip) {
                 isProcessing = false;
                 await renderList(); // Reset the card position
@@ -908,7 +908,7 @@ async function toggleStatus(custId, newStatus) {
 // Vacation Logic
 // USE THIS INSTEAD OF setVacation
 async function openVacationModal(custId) {
-    if (!confirmDateAction("Vacation")) return;
+    if (!await confirmDateAction("Vacation")) return;
     const days = prompt("How many days will they be away? (Including today)", "3");
 
     if (days && !isNaN(days)) {
@@ -982,10 +982,10 @@ async function generateInvoice(custId) {
     const perBowlPrice = PRICES[customer.plan] / 26;
     const total = (deliveredCount * perBowlPrice) + (addonsCount * 100);
 
-    alert(`Invoice for ${customer.nickname || customer.name}: 
+    await showDialog(`Invoice for ${customer.nickname || customer.name}: 
     Bowls: ${deliveredCount}
     Addons: ${addonsCount}
-    Total: ₹${Math.round(total)}`);
+    Total: ₹${Math.round(total)}`, 'info');
 }
 
 // Initialize
@@ -1101,6 +1101,45 @@ function closeModal() {
     document.getElementById('modalOverlay').classList.add('hidden');
 }
 
+function showDialog(message, type = 'info') {
+    return new Promise(resolve => {
+        const modal = document.getElementById('dialogModal');
+        const icon = document.getElementById('dialogIcon');
+        const msg = document.getElementById('dialogMessage');
+        const btns = document.getElementById('dialogButtons');
+
+        const icons = { info: 'ℹ️', success: '✅', error: '❌', warning: '⚠️' };
+        const colors = { info: 'bg-blue-100 text-blue-600', success: 'bg-green-100 text-green-600', error: 'bg-red-100 text-red-600', warning: 'bg-amber-100 text-amber-600' };
+
+        icon.innerHTML = `<div class="w-12 h-12 rounded-full ${colors[type] || colors.info} flex items-center justify-center text-2xl">${icons[type] || icons.info}</div>`;
+        msg.textContent = message;
+        btns.innerHTML = `<button id="dialogOkBtn" class="flex-1 py-3 bg-green-600 text-white font-bold rounded-xl">OK</button>`;
+
+        document.getElementById('dialogOkBtn').onclick = () => { modal.classList.add('hidden'); resolve(); };
+        modal.classList.remove('hidden');
+    });
+}
+
+function showConfirmDialog(message) {
+    return new Promise(resolve => {
+        const modal = document.getElementById('dialogModal');
+        const icon = document.getElementById('dialogIcon');
+        const msg = document.getElementById('dialogMessage');
+        const btns = document.getElementById('dialogButtons');
+
+        icon.innerHTML = `<div class="w-12 h-12 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-2xl">⚠️</div>`;
+        msg.textContent = message;
+        btns.innerHTML = `
+            <button id="dialogCancelBtn" class="flex-1 py-3 bg-gray-200 text-gray-700 font-bold rounded-xl">Cancel</button>
+            <button id="dialogYesBtn" class="flex-1 py-3 bg-green-600 text-white font-bold rounded-xl">Yes</button>`;
+
+        const close = (val) => { modal.classList.add('hidden'); resolve(val); };
+        document.getElementById('dialogCancelBtn').onclick = () => close(false);
+        document.getElementById('dialogYesBtn').onclick = () => close(true);
+        modal.classList.remove('hidden');
+    });
+}
+
 // --- NEW FEATURE: ADD NEW SUBSCRIBER ---
 function showAddCustomer() {
     const today = getToday();
@@ -1164,7 +1203,7 @@ function showAddCustomer() {
 
         // 1. Validation Logic
         if (!name) {
-            alert("Please enter a Full Name.");
+            await showDialog("Please enter a Full Name.", 'warning');
             return false;
         }
 
@@ -1481,8 +1520,8 @@ async function openExtraAddonModal(custId) {
     document.getElementById('addonModal').classList.remove('hidden');
 }
 
-function removeExtraAddon(custId, index) {
-    if (confirm('Remove this extra addon?')) {
+async function removeExtraAddon(custId, index) {
+    if (await showConfirmDialog('Remove this extra addon?')) {
         const arr = pendingExtraAddons.get(custId) || [];
         arr.splice(index, 1);
         pendingExtraAddons.set(custId, arr);
@@ -1581,7 +1620,7 @@ async function undoLastAction() {
 }*/
 
 async function resumeVacationEarly(custId) {
-    if (!confirm("Customer is back? This will clear future skipped records and make them active today.")) return;
+    if (!await showConfirmDialog("Customer is back? This will clear future skipped records and make them active today.")) return;
 
     const today = getToday();
 
@@ -1632,23 +1671,23 @@ const trueToday = localISOTime;
 
 
 // Reuse this guard in recordAttendance and openVacationModal
-function canExecuteAction(actionName) {
+async function canExecuteAction(actionName) {
     if (selectedDate !== trueToday) {
-        return confirm(`⚠️ ACTION WARNING\n\nYou are currently viewing ${selectedDate}.\nAre you sure you want to record ${actionName} for this date?`);
+        return await showConfirmDialog(`⚠️ ACTION WARNING\n\nYou are currently viewing ${selectedDate}.\nAre you sure you want to record ${actionName} for this date?`);
     }
     return true;
 }
-function confirmDateAction(actionType) {
+async function confirmDateAction(actionType) {
     // Block delivered/skipped for future dates, allow vacation
     if (selectedDate > trueToday) {
         if (actionType === 'VACATION') return true;
-        alert(`Cannot mark attendance for future dates.`);
+        await showDialog(`Cannot mark attendance for future dates.`, 'error');
         return false;
     }
     
     // Past dates: warning confirmation
     if (selectedDate !== trueToday) {
-        return confirm(`⚠️ ATTENTION: You are viewing ${selectedDate}.\n\nDo you really want to record a ${actionType} for this date instead of today?`);
+        return await showConfirmDialog(`⚠️ ATTENTION: You are viewing ${selectedDate}.\n\nDo you really want to record a ${actionType} for this date instead of today?`);
     }
     
     return true; // No warning needed for today
@@ -1701,7 +1740,7 @@ async function exportData() {
         toggleSettings();
     } catch (e) {
         console.error("Export failed:", e);
-        alert("Export failed: " + e.message);
+        await showDialog("Export failed: " + e.message, 'error');
     }
 }
 
@@ -1719,7 +1758,7 @@ async function importData() {
         reader.onload = async (event) => {
             try {
                 const data = JSON.parse(event.target.result);
-                if (!confirm("Overwrite ALL local tables with backup data?")) return;
+                if (!await showConfirmDialog("Overwrite ALL local tables with backup data?")) return;
 
                 // Handle both old format and new 'tables' format
                 const tablesToRestore = data.tables || data;
@@ -1734,11 +1773,11 @@ async function importData() {
                     }
                 }
 
-                alert("All tables restored successfully!");
+                await showDialog("All tables restored successfully!", 'success');
                 location.reload();
             } catch (err) {
                 console.error("Import failed:", err);
-                alert("Invalid backup file.");
+                await showDialog("Invalid backup file.", 'error');
             }
         };
         reader.readAsText(file);
@@ -1832,7 +1871,7 @@ async function handleMenuReset() {
 
     // Past date safeguard
     if (viewDate !== trueToday) {
-        if (!confirm("You are modifying a past date. Reset this record?")) return;
+        if (!await showConfirmDialog("You are modifying a past date. Reset this record?")) return;
     }
 
     const record = await db.attendance.where({ custId: id, date: viewDate }).first();
@@ -1943,7 +1982,7 @@ async function saveCustomerEdit() {
     
     // Validate: empty or invalid date
     if (!newStartDate || !/^\d{4}-\d{2}-\d{2}$/.test(newStartDate)) {
-        alert('Please enter a valid start date.');
+        await showDialog('Please enter a valid start date.', 'warning');
         return;
     }
     
@@ -1954,7 +1993,7 @@ async function saveCustomerEdit() {
         .first();
     
     if (attendanceBefore) {
-        alert(`Cannot set start date. There are attendance records before ${newStartDate} (first: ${attendanceBefore.date}).`);
+        await showDialog(`Cannot set start date. There are attendance records before ${newStartDate} (first: ${attendanceBefore.date}).`, 'error');
         document.getElementById('editStartDate').value = firstAttendanceDate;
         document.getElementById('editStartDateInfo').textContent = `First attendance: ${firstAttendanceDate}`;
         return;
@@ -2015,7 +2054,7 @@ async function saveCustomerEdit() {
 async function saveAndShareAdvanceFromEdit() {
     const addMoreAdvance = parseFloat(document.getElementById('editAddMoreAdvance')?.value);
     if (!addMoreAdvance || addMoreAdvance <= 0) {
-        alert("Please enter a valid advance amount.");
+        await showDialog("Please enter a valid advance amount.", 'warning');
         return;
     }
 
@@ -2107,7 +2146,7 @@ async function updateWalkIn(type, change) {
     // Safety check for past/future dates
     if (viewDate !== trueToday) {
         const action = change > 0 ? "ADD" : "REMOVE";
-        if (!confirm(`⚠️ ATTENTION: You are viewing ${viewDate}.\n\nDo you really want to ${action} a Walk-In ${type} for this date instead of today?`)) {
+        if (!await showConfirmDialog(`⚠️ ATTENTION: You are viewing ${viewDate}.\n\nDo you really want to ${action} a Walk-In ${type} for this date instead of today?`)) {
             return;
         }
     }
@@ -2404,7 +2443,7 @@ async function generateCustomerInvoice(custId, monthYear) {
     } else {
         // Fallback for desktop/unsupported browsers
         doc.save(fileName);
-        alert("PDF Downloaded. You can now manually attach it to WhatsApp.");
+        await showDialog("PDF Downloaded. You can now manually attach it to WhatsApp.", 'info');
     }
 }
 
@@ -2429,7 +2468,7 @@ const fs = firebase.firestore();
 
 async function syncToCloud(token) {
     if (!token || token.length < 3) {
-        alert("Please enter a valid Token");
+        await showDialog("Please enter a valid Token", 'warning');
         return;
     }
 
@@ -2447,17 +2486,17 @@ async function syncToCloud(token) {
             data: allData // Contains every table
         });
 
-        alert("✅ Full Cloud Backup Successful!");
+        await showDialog("✅ Full Cloud Backup Successful!", 'success');
     } catch (error) {
         console.error("Sync Error:", error);
-        alert("❌ Sync Failed. Check internet.");
+        await showDialog("❌ Sync Failed. Check internet.", 'error');
     }
 }
 
 
 async function pullFromCloud(token) {
     if (!token) return;
-    if (!confirm("This will DELETE all local data and replace it with Cloud data. Continue?")) return;
+    if (!await showConfirmDialog("This will DELETE all local data and replace it with Cloud data. Continue?")) return;
 
     try {
         const doc = await fs.collection('sync_groups').doc(token).get();
@@ -2477,14 +2516,14 @@ async function pullFromCloud(token) {
                 }
             }
 
-            alert("✅ All tables Pulled Successfully!");
+            await showDialog("✅ All tables Pulled Successfully!", 'success');
             location.reload();
         } else {
-            alert("No data found for this Token. Push data from your main device first.");
+            await showDialog("No data found for this Token. Push data from your main device first.", 'info');
         }
     } catch (error) {
         console.error(error);
-        alert("Error pulling data: " + error.message);
+        await showDialog("Error pulling data: " + error.message, 'error');
     }
 }
 
@@ -2564,7 +2603,7 @@ async function performSmartPush() {
     const now = new Date();
     const lastHardPushTime = parseInt(localStorage.getItem('lastHardPush')) || 0;
     const timeSinceLastHardPush = now.getTime() - lastHardPushTime;
-    const shouldHardPush = timeSinceLastHardPush > 15 * 60 * 1000; // 15 minutes
+    const shouldHardPush = timeSinceLastHardPush > 60 * 60 * 1000; // 1 hour
 
     // Skip if no changes AND not time for hard push
     if (!hasPendingChanges && !shouldHardPush) {
@@ -2788,7 +2827,7 @@ async function shareRouteList(route, date) {
     );
 
     if (activeDeliveries.length === 0) {
-        alert(`No deliveries scheduled for ${route} on this date.`);
+        await showDialog(`No deliveries scheduled for ${route} on this date.`, 'info');
         return;
     }
 
@@ -2861,7 +2900,7 @@ async function processRouteShare(route) {
     });
 
     if (activeDeliveries.length === 0) {
-        alert(`No deliveries for ${route} on ${date}`);
+        await showDialog(`No deliveries for ${route} on ${date}`, 'info');
         return;
     }
 
@@ -3037,7 +3076,7 @@ async function saveDriverNumbers() {
     }
     
     document.getElementById('driverNumbersModal').classList.add('hidden');
-    alert('Driver numbers saved!');
+    await showDialog('Driver numbers saved!', 'success');
 }
 
 // Open modal to set driver numbers
@@ -3095,7 +3134,7 @@ async function checkPublishedStatus() {
 async function publishRoutes() {
     const token = localStorage.getItem('grabb_sync_token');
     if (!token || !token.startsWith('GRABB')) {
-        alert('Error');
+        await showDialog('Error', 'error');
         return;
     }
     
@@ -3104,7 +3143,7 @@ async function publishRoutes() {
     const validMobiles = Object.values(identifiers);
     
     if (Object.keys(identifiers).length === 0) {
-        alert('Please set driver mobile numbers first using "Set Drivers" button.');
+        await showDialog('Please set driver mobile numbers first using "Set Drivers" button.', 'warning');
         return;
     }
     
@@ -3112,7 +3151,7 @@ async function publishRoutes() {
     const alreadyPublished = await checkPublishedStatus();
     
     if (alreadyPublished) {
-        if (!confirm('Already published records for today will be deleted. Republish?')) {
+        if (!await showConfirmDialog('Already published records for today will be deleted. Republish?')) {
             return;
         }
         // Delete only OUR records for today
@@ -3210,7 +3249,7 @@ async function publishRoutes() {
     }
     
     if (publishedCount === 0) {
-        alert('No customers to publish. Make sure customers have routes assigned and drivers are set.');
+        await showDialog('No customers to publish. Make sure customers have routes assigned and drivers are set.', 'warning');
         return;
     }
     
@@ -3218,11 +3257,11 @@ async function publishRoutes() {
         console.log('Publishing', publishedCount, 'customers...');
         await batch.commit();
         console.log('Published successfully');
-        alert(`✅ Published ${publishedCount} customers to delivery routes!`);
+        await showDialog(`✅ Published ${publishedCount} customers to delivery routes!`, 'success');
         document.getElementById('routeShareModal').classList.add('hidden');
     } catch (e) {
         console.error('Publish error:', e);
-        alert('❌ Failed to publish: ' + e.message);
+        await showDialog('❌ Failed to publish: ' + e.message, 'error');
     }
 }
 
@@ -3517,7 +3556,7 @@ async function toggleAutoSync() {
     if (isChecked) {
         const token = localStorage.getItem('grabb_sync_token');
         if (!token || token.trim() === "") {
-            alert("Please enter a Sync Token first!");
+            await showDialog("Please enter a Sync Token first!", 'warning');
             toggle.checked = false;
             localStorage.setItem('auto_sync_enabled', false);
             updateTokenFieldStatus();
@@ -3671,7 +3710,7 @@ function toggleDailyAddonSelection(addon) {
 async function saveDailyAddonsSelection() {
     // Validate: must have at least 1 addon
     if (selectedDailyAddonTypes.length === 0) {
-        alert('Please select at least 1 addon type');
+        await showDialog('Please select at least 1 addon type', 'warning');
         return;
     }
     

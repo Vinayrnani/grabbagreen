@@ -67,6 +67,16 @@ button[onclick*="addAddon"]:active {
     backdrop-filter: blur(4px);
     transition: opacity 0.3s ease;
 }
+#dialogModal {
+    backdrop-filter: blur(4px);
+}
+@keyframes fadeIn {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+}
+.animate-fade-in {
+    animation: fadeIn 0.2s ease-out;
+}
 #undoBar.visible {
     display: flex !important;
     animation: slideUp 0.3s ease-out;

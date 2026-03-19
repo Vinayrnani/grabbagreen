@@ -64,6 +64,8 @@ async function renderCalendar() {
     
     for (let i = 0; i < offset; i++) grid.innerHTML += `<div></div>`;
 
+    const today = istDateStr();
+
     for (let day = 1; day <= daysInMonth; day++) {
         const dateObj = new Date(year, month, day);
         const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -117,8 +119,12 @@ async function renderCalendar() {
             }
         }
 
+        const isClickable = dateStr <= today;
+        const clickClass = isClickable ? 'cursor-pointer hover:ring-1 hover:ring-blue-300 active:scale-95' : '';
+        const clickAttr = isClickable ? `onclick="goToAttendanceDate('${dateStr}')"` : '';
+
         grid.innerHTML += `
-            <div class="aspect-square ${bgColor} rounded-2xl border border-gray-100 flex flex-col items-center justify-center relative ${isToday ? 'ring-2 ring-blue-500 shadow-md z-10' : ''}">
+            <div class="aspect-square ${bgColor} rounded-2xl border border-gray-100 flex flex-col items-center justify-center relative ${isToday ? 'ring-2 ring-blue-500 shadow-md z-10' : ''} ${clickClass}" ${clickAttr}>
                 <span class="text-xs font-black ${textColor}">${day}</span>
                 <div class="flex gap-0.5 mt-1">${dotsHtml}</div>
             </div>
@@ -162,6 +168,20 @@ async function populateCalendarCustomerDropdown() {
             selector.value = filteredCustomers[0].id;
         }
     }
+}
+
+function goToAttendanceDate(dateStr) {
+    const today = istDateStr();
+    if (dateStr > today) return;
+
+    const d = new Date(dateStr + 'T00:00:00+05:30');
+    const formatted = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    if (!confirm(`Go to attendance for ${formatted}?`)) return;
+
+    selectedDate = dateStr;
+    document.getElementById('displayDate').innerText =
+        d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }).toUpperCase();
+    showTab('attendance');
 }
 
 async function changeMonth(step) {

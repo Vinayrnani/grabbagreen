@@ -429,3 +429,27 @@ Syntax OK.
 2. Hard block - reset to first attendance date + show warning
 3. Default to today if no attendance exists
 
+---
+
+# 2026-03-19
+
+## Prompt: in calendar view currently it does show the attendance of a customer in calendar view but they are not clickable.. can you make it clickable asking a confirmation then go to that date then switch to attendance tab then go to that date
+
+## Response: Made calendar day cells clickable. Clicking a non-future date shows confirmation dialog, then navigates to attendance tab on that date.
+
+**Changes in calendar.js:**
+1. Added `goToAttendanceDate(dateStr)` function — confirms, sets `selectedDate`, updates display, calls `showTab('attendance')`
+2. All non-future day cells get `onclick` handler + `cursor-pointer` + hover/active effects
+3. Future dates remain non-clickable (no cursor change, no handler)
+
+**Implementation notes:**
+- Set `selectedDate` directly instead of calling `changeAppDate()` to avoid double render
+- `showTab('attendance')` calls `renderList()` which uses the updated `selectedDate`
+- `today` computed once outside the loop for efficiency
+
+---
+
+## Prompt: ppp
+
+## Response: Committing and pushing calendar clickability changes.
+

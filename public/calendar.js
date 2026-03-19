@@ -119,7 +119,7 @@ async function renderCalendar() {
             }
         }
 
-        const isClickable = dateStr <= today;
+        const isClickable = dateStr <= today && !isSunday && !isHoliday;
         const clickClass = isClickable ? 'cursor-pointer hover:ring-1 hover:ring-blue-300 active:scale-95' : '';
         const clickAttr = isClickable ? `onclick="goToAttendanceDate('${dateStr}')"` : '';
 

@@ -453,3 +453,9 @@ Syntax OK.
 
 ## Response: Committing and pushing calendar clickability changes.
 
+---
+
+## Prompt: sundays and holidays doesnt need clicability
+
+## Response: Updated calendar.js - Sundays and holidays are no longer clickable. Changed condition from `dateStr <= today` to `dateStr <= today && !isSunday && !isHoliday`.
+

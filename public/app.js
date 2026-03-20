@@ -522,8 +522,10 @@ async function updateSingleCard(custId) {
     
     // Check if customer should be in active or inactive section
     const hasRecord = attendanceMap.has(custId);
+    const startDate = cust.startDate || getToday();
+    const isStarted = startDate <= viewDate;
     const inInactivePeriod = isInInactivePeriod(cust, viewDate);
-    const isActive = (cust.status !== 'inactive' || hasRecord) && !inInactivePeriod;
+    const isActive = (cust.status !== 'inactive' || hasRecord) && isStarted && !inInactivePeriod;
     
     // Find existing card
     const existingCard = document.getElementById(`card-${custId}`);
@@ -555,8 +557,10 @@ async function updateSingleCard(custId) {
         const activeCustomers = allCustomers.filter(c => {
             const hasRecord = attendanceMap.has(c.id);
             const isCurrentlyActive = c.status !== 'inactive';
+            const startDate = c.startDate || getToday();
+            const isStarted = startDate <= viewDate;
             const inInactivePeriod = isInInactivePeriod(c, viewDate);
-            return (isCurrentlyActive || hasRecord) && !inInactivePeriod;
+            return (isCurrentlyActive || hasRecord) && isStarted && !inInactivePeriod;
         });
         updateFilterPills(activeCustomers, attendanceMap);
     } else {
@@ -1104,6 +1108,7 @@ function closeModal() {
 function showDialog(message, type = 'info') {
     return new Promise(resolve => {
         const modal = document.getElementById('dialogModal');
+        const content = modal.querySelector('.animate-fade-in');
         const icon = document.getElementById('dialogIcon');
         const msg = document.getElementById('dialogMessage');
         const btns = document.getElementById('dialogButtons');
@@ -1115,14 +1120,23 @@ function showDialog(message, type = 'info') {
         msg.textContent = message;
         btns.innerHTML = `<button id="dialogOkBtn" class="flex-1 py-3 bg-green-600 text-white font-bold rounded-xl">OK</button>`;
 
-        document.getElementById('dialogOkBtn').onclick = () => { modal.classList.add('hidden'); resolve(); };
+        const close = () => { modal.classList.add('hidden'); resolve(); };
         modal.classList.remove('hidden');
+
+        // Enable button only after animation completes (prevents synthetic click from swipe)
+        const onReady = () => {
+            content.removeEventListener('animationend', onReady);
+            document.getElementById('dialogOkBtn').onclick = close;
+        };
+        content.addEventListener('animationend', onReady);
+        setTimeout(onReady, 250); // Fallback if animation doesn't replay
     });
 }
 
 function showConfirmDialog(message) {
     return new Promise(resolve => {
         const modal = document.getElementById('dialogModal');
+        const content = modal.querySelector('.animate-fade-in');
         const icon = document.getElementById('dialogIcon');
         const msg = document.getElementById('dialogMessage');
         const btns = document.getElementById('dialogButtons');
@@ -1134,9 +1148,16 @@ function showConfirmDialog(message) {
             <button id="dialogYesBtn" class="flex-1 py-3 bg-green-600 text-white font-bold rounded-xl">Yes</button>`;
 
         const close = (val) => { modal.classList.add('hidden'); resolve(val); };
-        document.getElementById('dialogCancelBtn').onclick = () => close(false);
-        document.getElementById('dialogYesBtn').onclick = () => close(true);
         modal.classList.remove('hidden');
+
+        // Enable buttons only after animation completes (prevents synthetic click from swipe)
+        const onReady = () => {
+            content.removeEventListener('animationend', onReady);
+            document.getElementById('dialogCancelBtn').onclick = () => close(false);
+            document.getElementById('dialogYesBtn').onclick = () => close(true);
+        };
+        content.addEventListener('animationend', onReady);
+        setTimeout(onReady, 250); // Fallback if animation doesn't replay
     });
 }
 

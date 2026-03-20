@@ -164,13 +164,14 @@ async function recalculateInvoiceTotals(invoiceId, cust) {
     
     const subTotal = items.reduce((sum, item) => sum + item.amount, 0);
     const discountAmount = subTotal * ((cust.discount || 0) / 100);
-    const adjustmentsTotal = adjustments.reduce((sum, adj) => 
+    const adjustmentsTotal = adjustments.reduce((sum, adj) =>
         sum + (adj.type === 'credit' ? -adj.amount : adj.amount), 0);
-    
-    const total = subTotal - discountAmount + adjustmentsTotal;
+
+    // Round total to nearest rupee (matches what's sent to customer)
+    const total = Math.round(subTotal - discountAmount + adjustmentsTotal);
     const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
     const balanceDue = Math.max(0, total - totalPaid);
-    
+
     let status = 'draft';
     if (balanceDue <= 0 && totalPaid > 0) status = 'paid';
     else if (totalPaid > 0) status = 'partial';
@@ -178,13 +179,13 @@ async function recalculateInvoiceTotals(invoiceId, cust) {
         const inv = await db.invoices.get(invoiceId);
         if (inv.sentAt) status = 'sent';
     }
-    
+
     await db.invoices.update(invoiceId, {
         subTotal,
         discountAmount,
         adjustmentsTotal,
-        total: Math.round(total),
-        balanceDue: Math.round(balanceDue),
+        total,
+        balanceDue,
         status
     });
 }

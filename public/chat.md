@@ -459,3 +459,56 @@ Syntax OK.
 
 ## Response: Updated calendar.js - Sundays and holidays are no longer clickable. Changed condition from `dateStr <= today` to `dateStr <= today && !isSunday && !isHoliday`.
 
+---
+
+# 2026-03-20
+
+## Prompt: can you change all simple alert or confirm to a good modal
+
+## Response: Replaced all 48 native alert()/confirm() calls with custom centered dialog modals.
+
+**Changes:**
+- Added `#dialogModal` HTML to index.html (z-310)
+- Added fade-in animation CSS to style.css
+- Added `showDialog()` and `showConfirmDialog()` functions to app.js
+- Replaced 36 calls in app.js, 5 in delivery.js, 6 in invoice.js, 1 in calendar.js
+- Made 5 functions async (removeExtraAddon, canExecuteAction, confirmDateAction, loginDelivery, goToAttendanceDate)
+- Updated 2 callers of confirmDateAction to use await
+- Renamed `const confirm` variable in invoice.js to avoid shadowing
+
+---
+
+## Prompt: the share text of invoice is falling back to other method of share via url that need to be removed
+
+## Response: Commented out the wa.me URL redirect fallback in invoice.js `shareInvoiceText()` function. Invoice now only marked as textShared when native share succeeds.
+
+---
+
+## Prompt: does rhis timwe works on iphone browsers?
+
+## Response: Explained iOS Safari timer behavior - setInterval is throttled when backgrounded but force push logic uses timestamp comparison so it still works correctly when user returns.
+
+---
+
+## Prompt: make it 1 hour
+
+## Response: Changed force push interval from 15 minutes to 1 hour (15 * 60 * 1000 → 60 * 60 * 1000) in app.js.
+
+---
+
+## Prompt: record payments os marking full incorrectly it has to mark when the amount matches calculated total but it is probably matching with first line item it seems
+
+## Response: Fixed recalculateInvoiceTotals() to round total to nearest rupee BEFORE calculating balanceDue and status. This ensures payment comparisons use the same rounded values sent to customers.
+
+---
+
+## Prompt: in attendance view that when marking attendance for past dates it does show confirmatin modal but I have to touch twice to makd it work
+
+## Response: Added animationend-based click guard to showConfirmDialog() and showDialog() - buttons only become clickable after fade-in animation completes, preventing synthetic clicks from swipe gestures from interfering.
+
+---
+
+## Prompt: the filter counts are not accurate in attendance tab
+
+## Response: Added missing `isStarted` check (startDate <= viewDate) to updateSingleCard() in both the isActive calculation and activeCustomers filter, matching the logic in renderList().
+

@@ -512,3 +512,11 @@ Syntax OK.
 
 ## Response: Added missing `isStarted` check (startDate <= viewDate) to updateSingleCard() in both the isActive calculation and activeCustomers filter, matching the logic in renderList().
 
+---
+
+# 2026-03-22
+
+## Prompt: Currently on load it checks only last 7 days for missing attendance can you make it it check all past days of the current month
+
+## Response: Updated pullDeliveryUpdates() in app.js to check all past days of the current month (up to yesterday) instead of just the last 7 days. Used istDateStr() from date-utils.js for consistent IST timezone handling.
+

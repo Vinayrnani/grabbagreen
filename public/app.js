@@ -3300,11 +3300,15 @@ async function pullDeliveryUpdates() {
     let totalPulled = 0;
     
     try {
-        // Check past 7 days from yesterday in IST
-        for (let i = 1; i <= 7; i++) {
-            const checkDate = istNow();
-            checkDate.setDate(checkDate.getDate() - i);
-            const dateStr = checkDate.toISOString().split('T')[0];
+        // Check all past days of current month (up to yesterday) using IST utilities
+        const today = istDateStr();
+        const [year, month] = today.split('-').map(Number);
+        const yesterday = new Date(today + 'T00:00:00+05:30');
+        yesterday.setDate(yesterday.getDate() - 1);
+        const lastDay = yesterday.getDate();
+
+        for (let day = 1; day <= lastDay; day++) {
+            const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
             
             // Skip Sundays and holidays - check in IST
             const isSunday = istDay(dateStr) === 0;

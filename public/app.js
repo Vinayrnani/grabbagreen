@@ -3354,6 +3354,9 @@ async function pullDeliveryUpdates() {
                 if (!customer.startDate) continue; // Skip if no startDate
                 if (customer.startDate > dateStr) continue; // Skip customers who haven't started yet
                 
+                // Skip dates during customer's inactive period
+                if (isInInactivePeriod(customer, dateStr)) continue;
+                
                 const hasLocal = localCustIds.includes(customer.id);
                 const hasCloud = cloudCustIds.includes(customer.id);
                 

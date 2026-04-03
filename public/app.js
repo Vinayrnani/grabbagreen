@@ -3433,12 +3433,19 @@ async function pullDeliveryUpdates() {
     }
 }
 
-async function showMissingAttendanceModal(missingByDate) {
+async function showMissingAttendanceModal(missingByDate, onContinue) {
     // Switch to attendance tab first
     await showTab('daily');
     
     const modal = document.getElementById('missingAttendanceModal');
     const container = document.getElementById('missingAttendanceList');
+    const continueBtn = document.getElementById('continueAnywayBtn');
+    
+    if (onContinue) {
+        continueBtn.classList.remove('hidden');
+    } else {
+        continueBtn.classList.add('hidden');
+    }
     
     const dateLabels = {
         0: 'Today',
@@ -3488,6 +3495,17 @@ window.showMissingAttendanceModal = showMissingAttendanceModal;
 
 function closeMissingAttendanceModal() {
     document.getElementById('missingAttendanceModal').classList.add('hidden');
+}
+
+async function continueWithMissingAttendance() {
+    const confirmed = await showConfirmDialog('Attendance is partial. Some customers may have incomplete data. Continue generating invoices?');
+    if (confirmed) {
+        closeMissingAttendanceModal();
+        if (window._onContinueMissingAttendance) {
+            window._onContinueMissingAttendance();
+            window._onContinueMissingAttendance = null;
+        }
+    }
 }
 
 function goToDate(dateStr) {

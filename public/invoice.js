@@ -286,6 +286,12 @@ async function getMissingAttendanceForMonth(monthYear) {
             // Skip if before customer start date
             if (cust.startDate && dateStr < cust.startDate) continue;
             
+            // Skip if customer was in inactive period on this date
+            if (cust.inactive_st_dt) {
+                const endDt = cust.inactive_ed_dt || '9999-12-31';
+                if (dateStr >= cust.inactive_st_dt && dateStr <= endDt) continue;
+            }
+            
             // Check if attendance exists
             if (!attendanceMap[cust.id] || !attendanceMap[cust.id].has(dateStr)) {
                 if (!missingByDate[dateStr]) missingByDate[dateStr] = [];
@@ -306,10 +312,17 @@ async function generateAllInvoicesForMonth() {
     const missing = await getMissingAttendanceForMonth(monthYear);
     
     if (Object.keys(missing).length > 0) {
-        // Show missing attendance modal - hard block
-        showMissingAttendanceModal(missing);
+        window._onContinueMissingAttendance = async () => {
+            await generateInvoicesForMonth(monthYear);
+        };
+        showMissingAttendanceModal(missing, true);
         return;
     }
+    
+    await generateInvoicesForMonth(monthYear);
+}
+
+async function generateInvoicesForMonth(monthYear) {
     
     // Check if invoices already exist for this month
     const existingInvoices = await db.invoices.where('monthYear').equals(monthYear).toArray();

@@ -797,10 +797,16 @@
                 <div id="missingAttendanceList" class="mb-6 max-h-[60vh] overflow-y-auto">
                 </div>
                 
-                <button onclick="closeMissingAttendanceModal()"
-                    class="w-full bg-gray-900 text-white py-3 rounded-xl font-bold">
-                    Close
-                </button>
+                <div class="flex gap-3">
+                    <button onclick="closeMissingAttendanceModal()"
+                        class="flex-1 bg-gray-200 text-gray-700 py-3 rounded-xl font-bold">
+                        Close
+                    </button>
+                    <button id="continueAnywayBtn" onclick="continueWithMissingAttendance()"
+                        class="hidden flex-1 bg-green-600 text-white py-3 rounded-xl font-bold">
+                        Continue Anyway
+                    </button>
+                </div>
             </div>
         </div>
     </div>

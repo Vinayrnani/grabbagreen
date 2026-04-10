@@ -348,28 +348,28 @@
                 class="text-sm font-black text-gray-400 uppercase tracking-widest mb-4 text-center">Customer Options
             </h2>
             <div class="space-y-3">
+                <div id="routeSelectSection" class="hidden p-3 bg-blue-50 rounded-2xl">
+                    <div class="text-[10px] font-bold text-blue-400 uppercase tracking-widest mb-2 text-center">Change Route (tap to save)</div>
+                    <div class="flex justify-center gap-4">
+                        <label class="cursor-pointer">
+                            <input type="radio" name="menuRoute" value="A" onchange="handleMenuChangeRoute()" class="hidden peer">
+                            <div class="w-10 h-10 flex items-center justify-center rounded-full border-2 border-gray-300 peer-checked:border-blue-700 peer-checked:bg-blue-700 font-bold text-sm text-gray-500 peer-checked:text-white transition-all">A</div>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="radio" name="menuRoute" value="B" onchange="handleMenuChangeRoute()" class="hidden peer">
+                            <div class="w-10 h-10 flex items-center justify-center rounded-full border-2 border-gray-300 peer-checked:border-blue-700 peer-checked:bg-blue-700 font-bold text-sm text-gray-500 peer-checked:text-white transition-all">B</div>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="radio" name="menuRoute" value="C" onchange="handleMenuChangeRoute()" class="hidden peer">
+                            <div class="w-10 h-10 flex items-center justify-center rounded-full border-2 border-gray-300 peer-checked:border-blue-700 peer-checked:bg-blue-700 font-bold text-sm text-gray-500 peer-checked:text-white transition-all">C</div>
+                        </label>
+                    </div>
+                </div>
                 <button onclick="handleMenuEdit()"
                     class="w-full flex items-center justify-between p-4 bg-gray-50 rounded-2xl font-bold text-gray-800 active:bg-gray-100">
                     <span>✏️ Edit Profile</span>
                     <span class="text-gray-400">→</span>
                 </button>
-                <div id="routeSelectSection" class="hidden p-3 bg-blue-50 rounded-2xl">
-                    <div class="text-[10px] font-bold text-blue-400 uppercase tracking-widest mb-2 text-center">Change Route (tap to save)</div>
-                    <div class="flex justify-center gap-4">
-                        <label class="flex items-center gap-1 cursor-pointer">
-                            <input type="radio" name="menuRoute" value="A" onchange="handleMenuChangeRoute()" class="w-4 h-4 text-blue-600">
-                            <span class="text-sm font-bold text-gray-700">A</span>
-                        </label>
-                        <label class="flex items-center gap-1 cursor-pointer">
-                            <input type="radio" name="menuRoute" value="B" onchange="handleMenuChangeRoute()" class="w-4 h-4 text-blue-600">
-                            <span class="text-sm font-bold text-gray-700">B</span>
-                        </label>
-                        <label class="flex items-center gap-1 cursor-pointer">
-                            <input type="radio" name="menuRoute" value="C" onchange="handleMenuChangeRoute()" class="w-4 h-4 text-blue-600">
-                            <span class="text-sm font-bold text-gray-700">C</span>
-                        </label>
-                    </div>
-                </div>
                 <button id="vacationActionBtn" onclick="handleMenuVacation()"
                     class="w-full flex items-center justify-between p-4 bg-orange-50 rounded-2xl font-bold text-orange-600 active:bg-orange-100">
                     <span>🏖️ Set Vacation</span>

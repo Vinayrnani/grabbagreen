@@ -1870,6 +1870,24 @@ async function openActionMenu(custId) {
         vacationBtn.style.display = 'flex';
     }
 
+    // Show route section only for active customers (not on vacation, not inactive)
+    const routeSection = document.getElementById('routeSelectSection');
+    const isOnVacation = record && record.isVacation;
+    const isInactive = cust.status === 'inactive';
+    const isActive = !isOnVacation && !isInactive;
+
+    if (isActive) {
+        routeSection.classList.remove('hidden');
+        // Set current route as selected
+        const currentRoute = cust.route || 'A';
+        const routeRadios = document.getElementsByName('menuRoute');
+        for (const radio of routeRadios) {
+            radio.checked = radio.value === currentRoute;
+        }
+    } else {
+        routeSection.classList.add('hidden');
+    }
+
     document.getElementById('actionMenu').classList.remove('hidden');
 }
 
@@ -1908,6 +1926,16 @@ function handleMenuVacation() {
     const id = menuActiveCustId;
     closeActionMenu();
     openVacationModal(id);
+}
+
+async function handleMenuChangeRoute() {
+    const id = menuActiveCustId;
+    const selectedRoute = document.querySelector('input[name="menuRoute"]:checked')?.value;
+    if (!selectedRoute) return;
+    
+    await db.customers.update(id, { route: selectedRoute });
+    closeActionMenu();
+    renderList();
 }
 
 async function openEditModal(custId) {

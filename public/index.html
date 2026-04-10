@@ -353,6 +353,23 @@
                     <span>✏️ Edit Profile</span>
                     <span class="text-gray-400">→</span>
                 </button>
+                <div id="routeSelectSection" class="hidden p-3 bg-blue-50 rounded-2xl">
+                    <div class="text-[10px] font-bold text-blue-400 uppercase tracking-widest mb-2 text-center">Change Route (tap to save)</div>
+                    <div class="flex justify-center gap-4">
+                        <label class="flex items-center gap-1 cursor-pointer">
+                            <input type="radio" name="menuRoute" value="A" onchange="handleMenuChangeRoute()" class="w-4 h-4 text-blue-600">
+                            <span class="text-sm font-bold text-gray-700">A</span>
+                        </label>
+                        <label class="flex items-center gap-1 cursor-pointer">
+                            <input type="radio" name="menuRoute" value="B" onchange="handleMenuChangeRoute()" class="w-4 h-4 text-blue-600">
+                            <span class="text-sm font-bold text-gray-700">B</span>
+                        </label>
+                        <label class="flex items-center gap-1 cursor-pointer">
+                            <input type="radio" name="menuRoute" value="C" onchange="handleMenuChangeRoute()" class="w-4 h-4 text-blue-600">
+                            <span class="text-sm font-bold text-gray-700">C</span>
+                        </label>
+                    </div>
+                </div>
                 <button id="vacationActionBtn" onclick="handleMenuVacation()"
                     class="w-full flex items-center justify-between p-4 bg-orange-50 rounded-2xl font-bold text-orange-600 active:bg-orange-100">
                     <span>🏖️ Set Vacation</span>
